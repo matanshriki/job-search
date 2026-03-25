@@ -1,0 +1,77 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+:root {
+  --background: 224 32% 5%;
+  --foreground: 210 36% 98%;
+  --card: 222 38% 8%;
+  --card-foreground: 210 36% 98%;
+  --popover: 222 38% 8%;
+  --popover-foreground: 210 36% 98%;
+  --primary: 172 66% 48%;
+  --primary-foreground: 224 40% 6%;
+  --secondary: 220 28% 12%;
+  --secondary-foreground: 210 34% 96%;
+  --muted: 220 24% 13%;
+  --muted-foreground: 215 18% 62%;
+  --accent: 265 70% 58%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 68% 48%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 220 22% 16%;
+  --input: 220 22% 16%;
+  --ring: 172 66% 48%;
+  --radius: 0.7rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply min-h-screen text-foreground antialiased;
+    font-family: var(--font-sans);
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(ellipse 100% 70% at 50% -25%, hsl(172 45% 22% / 0.22), transparent 55%),
+      radial-gradient(ellipse 60% 45% at 100% 0%, hsl(265 45% 28% / 0.12), transparent 50%),
+      radial-gradient(ellipse 50% 40% at 0% 20%, hsl(210 40% 18% / 0.1), transparent 45%);
+    background-attachment: fixed;
+  }
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display), var(--font-sans);
+    letter-spacing: -0.02em;
+  }
+}
