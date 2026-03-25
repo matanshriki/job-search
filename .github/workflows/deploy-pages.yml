@@ -1,9 +1,5 @@
-# Builds Vite to dist/ and pushes only those files to branch `gh-pages`.
-# GitHub Pages must serve that branch (not `main`), otherwise the live site
-# will use the repo-root index.html and try to load /src/main.tsx (404).
-#
-# Repo → Settings → Pages → Build and deployment → Source:
-#   "Deploy from a branch" → Branch: gh-pages → Folder: / (root)
+# Publishes dist/ via GitHub’s Pages Actions API (Settings → Source: GitHub Actions).
+# Do not use the suggested “Jekyll” / “Static HTML” templates — this workflow is enough.
 
 name: Deploy to GitHub Pages
 
@@ -13,27 +9,36 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-
+      - uses: actions/configure-pages@v5
       - run: npm ci
       - run: npm run build
-
-      - uses: peaceiris/actions-gh-pages@v4
+      - uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
+          path: dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
