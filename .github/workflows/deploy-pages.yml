@@ -29,6 +29,12 @@ jobs:
       - uses: actions/configure-pages@v5
       - run: npm ci
       - run: npm run build
+      - name: Ensure SPA 404 fallback for GitHub Pages
+        run: |
+          test -f dist/index.html
+          cp dist/index.html dist/404.html
+          test -s dist/404.html
+          ls -la dist/*.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
