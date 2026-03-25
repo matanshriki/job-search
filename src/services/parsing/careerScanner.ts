@@ -126,37 +126,76 @@ async function fetchCareerPageHtmlViaEnvProxy(
 }
 
 /**
- * Static hosting has no dev server proxy. After a CORS-blocked direct fetch, try a public relay
- * (third party sees target URLs). Disable with VITE_DISABLE_PUBLIC_CORS_PROXY=true.
+ * After a CORS-blocked direct fetch, try several third-party relays (each may fail: 520, rate limits,
+ * corporate blocking). Disable with VITE_DISABLE_PUBLIC_CORS_PROXY=true.
  */
-async function fetchCareerPageHtmlViaPublicRelay(url: string): Promise<CareerPageFetchResult> {
-  try {
-    const relay =
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
-    const res = await fetch(relay, { method: 'GET', credentials: 'omit' })
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: `Public relay HTTP ${res.status}.`,
-        corsBlocked: false,
+async function fetchCareerPageHtmlViaPublicRelays(
+  url: string,
+): Promise<CareerPageFetchResult> {
+  const attempts: string[] = []
+
+  const tryRelay = async (
+    label: string,
+    getHtml: () => Promise<string | null>,
+  ): Promise<CareerPageFetchResult | null> => {
+    try {
+      const html = await getHtml()
+      if (html?.trim()) {
+        return { ok: true, html, finalUrl: url, viaRelay: label }
       }
+      attempts.push(`${label}: empty response`)
+    } catch (e) {
+      attempts.push(`${label}: ${e instanceof Error ? e.message : String(e)}`)
     }
-    const html = await res.text()
-    if (!html.trim()) {
-      return {
-        ok: false,
-        error: 'Public relay returned an empty response.',
-        corsBlocked: false,
-      }
-    }
-    return { ok: true, html, finalUrl: url, viaRelay: 'allorigins.win' }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return {
-      ok: false,
-      error: msg,
-      corsBlocked: false,
-    }
+    return null
+  }
+
+  const r1 = await tryRelay('codetabs', async () => {
+    const res = await fetch(
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+      { method: 'GET', credentials: 'omit', mode: 'cors' },
+    )
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return await res.text()
+  })
+  if (r1?.ok) return r1
+
+  const r2 = await tryRelay('corsproxy.io', async () => {
+    const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, {
+      method: 'GET',
+      credentials: 'omit',
+      mode: 'cors',
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return await res.text()
+  })
+  if (r2?.ok) return r2
+
+  const r3 = await tryRelay('allorigins (get)', async () => {
+    const res = await fetch(
+      `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+      { credentials: 'omit', mode: 'cors' },
+    )
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = (await res.json()) as { contents?: unknown }
+    return typeof data.contents === 'string' ? data.contents : null
+  })
+  if (r3?.ok) return r3
+
+  const r4 = await tryRelay('allorigins (raw)', async () => {
+    const res = await fetch(
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      { credentials: 'omit', mode: 'cors' },
+    )
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return await res.text()
+  })
+  if (r4?.ok) return r4
+
+  return {
+    ok: false,
+    error: attempts.length > 0 ? attempts.join(' · ') : 'No relays attempted',
+    corsBlocked: true,
   }
 }
 
@@ -194,8 +233,13 @@ async function fetchCareerPageHtml(url: string): Promise<CareerPageFetchResult> 
       import.meta.env.VITE_DISABLE_PUBLIC_CORS_PROXY === '1'
 
     if (import.meta.env.PROD && corsBlocked && !disableRelay) {
-      const relayed = await fetchCareerPageHtmlViaPublicRelay(url)
+      const relayed = await fetchCareerPageHtmlViaPublicRelays(url)
       if (relayed.ok) return relayed
+      return {
+        ok: false,
+        error: `${msg} · Relays: ${relayed.error}`,
+        corsBlocked,
+      }
     }
 
     return {
@@ -249,7 +293,7 @@ export async function scanCompanyCareerPage(options: {
       jobs: [],
       warnings,
       message: fetched.corsBlocked
-        ? `Browser blocked cross-origin fetch (CORS). This is expected for many career sites. Use “Paste HTML” on the Companies page, or add jobs manually. Technical detail: ${fetched.error}`
+        ? `Could not load the career page from the browser (CORS), and every public fetch relay failed too — common on VPNs / strict networks. Use “Paste HTML”, a Greenhouse board URL, or run Scan from your machine with npm run dev. Details: ${fetched.error}`
         : `Could not fetch career page: ${fetched.error}`,
     }
   }
