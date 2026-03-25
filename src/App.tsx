@@ -32,7 +32,9 @@ export default function App() {
   return (
     <ToastStateProvider>
       <AppStateProvider>
-        <BrowserRouter>
+        <BrowserRouter
+          basename={import.meta.env.BASE_URL.replace(/\/$/, '') || undefined}
+        >
           <AppRoutes />
           <Toaster />
         </BrowserRouter>
