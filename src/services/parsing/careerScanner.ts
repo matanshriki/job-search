@@ -34,8 +34,26 @@ export interface CareerScanResult {
 }
 
 type CareerPageFetchResult =
-  | { ok: true; html: string; finalUrl: string }
+  | { ok: true; html: string; finalUrl: string; viaRelay?: string }
   | { ok: false; error: string; corsBlocked: boolean }
+
+function jsonToCareerProxyResult(
+  data: { ok?: boolean; html?: string; finalUrl?: string; error?: string },
+  fallbackUrl: string,
+): CareerPageFetchResult {
+  if (data.ok && typeof data.html === 'string') {
+    return {
+      ok: true,
+      html: data.html,
+      finalUrl: typeof data.finalUrl === 'string' ? data.finalUrl : fallbackUrl,
+    }
+  }
+  return {
+    ok: false,
+    error: typeof data.error === 'string' ? data.error : 'Career proxy fetch failed.',
+    corsBlocked: false,
+  }
+}
 
 /** In `npm run dev`, Vite serves `/__career_fetch` (server-side fetch) to avoid browser CORS. */
 async function fetchCareerPageHtmlViaDevProxy(
@@ -60,18 +78,7 @@ async function fetchCareerPageHtmlViaDevProxy(
       finalUrl?: string
       error?: string
     }
-    if (data.ok && typeof data.html === 'string') {
-      return {
-        ok: true,
-        html: data.html,
-        finalUrl: typeof data.finalUrl === 'string' ? data.finalUrl : url,
-      }
-    }
-    return {
-      ok: false,
-      error: typeof data.error === 'string' ? data.error : 'Dev proxy fetch failed.',
-      corsBlocked: false,
-    }
+    return jsonToCareerProxyResult(data, url)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     const cause =
@@ -84,9 +91,81 @@ async function fetchCareerPageHtmlViaDevProxy(
   }
 }
 
+/** Optional build-time URL (e.g. Cloudflare Worker) with the same JSON contract as `__career_fetch`. */
+async function fetchCareerPageHtmlViaEnvProxy(
+  url: string,
+): Promise<CareerPageFetchResult | null> {
+  const base = import.meta.env.VITE_CAREER_FETCH_URL?.trim()
+  if (!base) return null
+  const sep = base.includes('?') ? '&' : '?'
+  const proxyUrl = `${base.replace(/\/$/, '')}${sep}url=${encodeURIComponent(url)}`
+  try {
+    const res = await fetch(proxyUrl, { method: 'GET', credentials: 'omit' })
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: `Career proxy HTTP ${res.status}.`,
+        corsBlocked: false,
+      }
+    }
+    const data = (await res.json()) as {
+      ok?: boolean
+      html?: string
+      finalUrl?: string
+      error?: string
+    }
+    return jsonToCareerProxyResult(data, url)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return {
+      ok: false,
+      error: `Career proxy request failed: ${msg}`,
+      corsBlocked: false,
+    }
+  }
+}
+
+/**
+ * Static hosting has no dev server proxy. After a CORS-blocked direct fetch, try a public relay
+ * (third party sees target URLs). Disable with VITE_DISABLE_PUBLIC_CORS_PROXY=true.
+ */
+async function fetchCareerPageHtmlViaPublicRelay(url: string): Promise<CareerPageFetchResult> {
+  try {
+    const relay =
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+    const res = await fetch(relay, { method: 'GET', credentials: 'omit' })
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: `Public relay HTTP ${res.status}.`,
+        corsBlocked: false,
+      }
+    }
+    const html = await res.text()
+    if (!html.trim()) {
+      return {
+        ok: false,
+        error: 'Public relay returned an empty response.',
+        corsBlocked: false,
+      }
+    }
+    return { ok: true, html, finalUrl: url, viaRelay: 'allorigins.win' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return {
+      ok: false,
+      error: msg,
+      corsBlocked: false,
+    }
+  }
+}
+
 async function fetchCareerPageHtml(url: string): Promise<CareerPageFetchResult> {
-  const viaProxy = await fetchCareerPageHtmlViaDevProxy(url)
-  if (viaProxy) return viaProxy
+  const viaDev = await fetchCareerPageHtmlViaDevProxy(url)
+  if (viaDev) return viaDev
+
+  const viaEnv = await fetchCareerPageHtmlViaEnvProxy(url)
+  if (viaEnv?.ok) return viaEnv
 
   try {
     const res = await fetch(url, {
@@ -109,6 +188,16 @@ async function fetchCareerPageHtml(url: string): Promise<CareerPageFetchResult> 
     const corsBlocked =
       /network|failed to fetch|cors|load failed/i.test(msg) ||
       msg === 'Failed to fetch'
+
+    const disableRelay =
+      import.meta.env.VITE_DISABLE_PUBLIC_CORS_PROXY === 'true' ||
+      import.meta.env.VITE_DISABLE_PUBLIC_CORS_PROXY === '1'
+
+    if (import.meta.env.PROD && corsBlocked && !disableRelay) {
+      const relayed = await fetchCareerPageHtmlViaPublicRelay(url)
+      if (relayed.ok) return relayed
+    }
+
     return {
       ok: false,
       error: msg,
@@ -166,6 +255,11 @@ export async function scanCompanyCareerPage(options: {
   }
 
   const { html, finalUrl } = fetched
+  if (fetched.viaRelay) {
+    warnings.push(
+      `HTML was fetched via ${fetched.viaRelay} (public relay; treat listings as unverified).`,
+    )
+  }
 
   if (tokenFromUrl || isLikelyGreenhousePage(html, finalUrl)) {
     const embedded = extractGreenhouseBoardToken(html) ?? tokenFromUrl

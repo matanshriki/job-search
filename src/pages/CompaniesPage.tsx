@@ -114,7 +114,7 @@ export function CompaniesPage() {
     <>
       <PageHeader
         title="Companies tracker"
-        description="Track employers, store career URLs, and run scans. In dev, HTML goes through a local proxy; preview/production may need Paste HTML on CORS-heavy sites."
+        description="Track employers, store career URLs, and run scans. On GitHub Pages, scans use a public CORS relay when the browser is blocked; dev uses the local Vite proxy. Paste HTML still works everywhere."
         actions={
           <Dialog
             open={open}
@@ -177,8 +177,8 @@ export function CompaniesPage() {
                     ) : null}
                     For Greenhouse, the slug must be real (the path after{' '}
                     <span className="font-mono text-[10px]">boards.greenhouse.io/</span>
-                    ). Fake slugs return API 404. Static preview builds cannot proxy HTML — use{' '}
-                    <strong className="text-foreground">Paste HTML</strong> if scan fails.
+                    ). Fake slugs return API 404. On the live site, scans may use a public CORS relay;
+                    use <strong className="text-foreground">Paste HTML</strong> if a site blocks that too.
                   </p>
                 </div>
                 <div>
