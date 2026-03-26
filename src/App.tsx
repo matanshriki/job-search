@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Toaster } from '@/components/ui/toaster'
 import { AppStateProvider } from '@/context/app-state'
@@ -28,16 +28,36 @@ function AppRoutes() {
   )
 }
 
+function AppShell() {
+  return (
+    <>
+      <AppRoutes />
+      <Toaster />
+    </>
+  )
+}
+
+/**
+ * GitHub Pages has no static files for `/job-search/profile` etc., so path-based URLs 404 on
+ * refresh. Hash routes (`/job-search/#/profile`) only request `/job-search/`, which exists.
+ * Dev keeps BrowserRouter + basename for normal `/job-search/...` paths.
+ */
 export default function App() {
+  const isProd = import.meta.env.PROD
   return (
     <ToastStateProvider>
       <AppStateProvider>
-        <BrowserRouter
-          basename={import.meta.env.BASE_URL.replace(/\/$/, '') || undefined}
-        >
-          <AppRoutes />
-          <Toaster />
-        </BrowserRouter>
+        {isProd ? (
+          <HashRouter>
+            <AppShell />
+          </HashRouter>
+        ) : (
+          <BrowserRouter
+            basename={import.meta.env.BASE_URL.replace(/\/$/, '') || undefined}
+          >
+            <AppShell />
+          </BrowserRouter>
+        )}
       </AppStateProvider>
     </ToastStateProvider>
   )

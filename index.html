@@ -12,6 +12,22 @@
       rel="stylesheet"
     />
     <title>Job Search Command Center</title>
+    <!-- GitHub Pages: path-only URLs like /job-search/profile 404 unless we jump to hash routing. -->
+    <script>
+      (function () {
+        if (!/\.github\.io$/i.test(location.hostname)) return
+        if (location.hash) return
+        var base = '/job-search'
+        var path = location.pathname.replace(/\/$/, '')
+        if (path === base || path === base + '/index.html') return
+        if (!path.startsWith(base + '/')) return
+        var rest = path.slice(base.length + 1)
+        if (!rest) return
+        var last = rest.split('/').pop() || ''
+        if (/\.[a-zA-Z0-9]{1,10}$/.test(last)) return
+        location.replace(location.origin + base + '/#/' + rest)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
