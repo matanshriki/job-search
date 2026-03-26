@@ -313,8 +313,8 @@ export function JobsFeedPage() {
             <span className="font-medium text-foreground">Match profile geographies</span>
             {' — '}
             When your Profile lists preferred regions, hide jobs that never mention any of them in the
-            title, location, or description. Turn off to see every saved role (e.g. US listings from a
-            company scan).
+            role’s <strong className="text-foreground">title or location line</strong> (not buried in
+            full-page HTML). Turn off to see every saved role.
           </label>
         </div>
         <div className="sm:col-span-2 lg:col-span-2">

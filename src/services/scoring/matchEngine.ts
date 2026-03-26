@@ -248,16 +248,18 @@ export function scoreDomainFit(
 }
 
 /**
- * True if the job text mentions at least one preferred geography term (title + location + description).
- * Used by the jobs feed filter. Empty profile list → always true.
+ * True if at least one preferred geography term appears in the job **title or location** (not the
+ * full description). Company career pages often list every country in long HTML; matching the full
+ * body lets unrelated regions pass (e.g. UK role while the page mentions Israel elsewhere).
+ * Empty profile list → always true.
  */
 export function jobMatchesPreferredGeographies(
   job: Pick<Job, 'title' | 'location' | 'description'>,
   profile: SearchProfile,
 ): boolean {
   if (!profile.preferredGeographies.length) return true
-  const blob = `${job.title} ${job.location} ${job.description}`.slice(0, 12000)
-  const h = norm(blob)
+  const headline = `${job.title} ${job.location}`.slice(0, 8000)
+  const h = norm(headline)
   return profile.preferredGeographies.some((t) => t && h.includes(norm(t)))
 }
 
@@ -289,8 +291,10 @@ export function scoreLocationFit(
     }
   }
 
-  const h = norm(blob)
-  const hits = profile.preferredGeographies.filter((t) => t && h.includes(norm(t)))
+  /** Prefer title + location for geo hits so long descriptions don’t fake a match. */
+  const headline = `${job.title} ${job.location}`.slice(0, 8000)
+  const hHead = norm(headline)
+  const hits = profile.preferredGeographies.filter((t) => t && hHead.includes(norm(t)))
   if (hits.length > 0) {
     const rawRatio = hits.length / profile.preferredGeographies.length
     const base = Math.round(max * Math.min(1, rawRatio + 0.12))
