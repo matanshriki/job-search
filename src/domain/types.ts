@@ -130,6 +130,8 @@ export interface JobsFeedPersistedState {
   location: string
   minScore: string
   sort: JobsFeedSort
+  /** When true, hide jobs that do not mention any Profile “preferred geography” term */
+  hideOutsideProfileGeos: boolean
   /** Currently selected saved view, or null for ad-hoc filters */
   activeViewId: string | null
 }
@@ -144,6 +146,7 @@ export interface SavedJobsView {
   location: string
   minScore: string
   sort: JobsFeedSort
+  hideOutsideProfileGeos: boolean
 }
 
 export interface AppData {

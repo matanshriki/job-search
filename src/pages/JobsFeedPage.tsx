@@ -13,10 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { DEFAULT_JOBS_FEED, JOB_STATUS_LABELS, MIN_RELEVANT_MATCH_SCORE } from '@/domain/constants'
 import { JOB_SOURCE_LABELS } from '@/domain/types'
 import type { JobSourceType, JobStatus, JobsFeedSort, SavedJobsView } from '@/domain/types'
 import { useAppState } from '@/context/app-state'
+import { jobMatchesPreferredGeographies } from '@/services/scoring/matchEngine'
 import { Link } from 'react-router-dom'
 
 function filtersFromView(v: SavedJobsView) {
@@ -28,6 +30,7 @@ function filtersFromView(v: SavedJobsView) {
     location: v.location,
     minScore: v.minScore,
     sort: v.sort,
+    hideOutsideProfileGeos: v.hideOutsideProfileGeos ?? DEFAULT_JOBS_FEED.hideOutsideProfileGeos,
   }
 }
 
@@ -42,6 +45,9 @@ export function JobsFeedPage() {
   const [location, setLocation] = useState('')
   const [minScore, setMinScore] = useState('')
   const [sort, setSort] = useState<JobsFeedSort>('score')
+  const [hideOutsideProfileGeos, setHideOutsideProfileGeos] = useState(
+    DEFAULT_JOBS_FEED.hideOutsideProfileGeos,
+  )
   const [activeViewId, setActiveViewId] = useState<string | null>(null)
   const [newViewName, setNewViewName] = useState('')
 
@@ -57,6 +63,9 @@ export function JobsFeedPage() {
       setLocation(f.location)
       setMinScore(f.minScore)
       setSort(f.sort)
+      setHideOutsideProfileGeos(
+        f.hideOutsideProfileGeos ?? DEFAULT_JOBS_FEED.hideOutsideProfileGeos,
+      )
       setActiveViewId(f.activeViewId ?? null)
     })
   }, [data.jobsFeed])
@@ -72,6 +81,7 @@ export function JobsFeedPage() {
         location,
         minScore,
         sort,
+        hideOutsideProfileGeos,
         activeViewId,
       })
     }, 320)
@@ -84,6 +94,7 @@ export function JobsFeedPage() {
     location,
     minScore,
     sort,
+    hideOutsideProfileGeos,
     activeViewId,
     updateJobsFeed,
   ])
@@ -98,6 +109,7 @@ export function JobsFeedPage() {
       setLocation(f.location)
       setMinScore(f.minScore)
       setSort(f.sort)
+      setHideOutsideProfileGeos(f.hideOutsideProfileGeos)
       setActiveViewId(v.id)
     },
     [],
@@ -116,8 +128,9 @@ export function JobsFeedPage() {
       location,
       minScore,
       sort,
+      hideOutsideProfileGeos,
     }),
-    [q, source, status, company, location, minScore, sort],
+    [q, source, status, company, location, minScore, sort, hideOutsideProfileGeos],
   )
 
   const handleSaveView = () => {
@@ -151,6 +164,12 @@ export function JobsFeedPage() {
     if (c) list = list.filter((j) => j.company.toLowerCase().includes(c))
     const loc = location.trim().toLowerCase()
     if (loc) list = list.filter((j) => j.location.toLowerCase().includes(loc))
+    if (
+      hideOutsideProfileGeos &&
+      data.profile.preferredGeographies.filter((g) => g.trim()).length > 0
+    ) {
+      list = list.filter((j) => jobMatchesPreferredGeographies(j, data.profile))
+    }
     const ms = Number(minScore)
     if (!Number.isNaN(ms) && minScore !== '') {
       list = list.filter((j) => j.score >= ms)
@@ -163,7 +182,18 @@ export function JobsFeedPage() {
       return bp.localeCompare(ap)
     })
     return list
-  }, [data.jobs, q, source, status, company, location, minScore, sort])
+  }, [
+    data.jobs,
+    data.profile,
+    q,
+    source,
+    status,
+    company,
+    location,
+    minScore,
+    sort,
+    hideOutsideProfileGeos,
+  ])
 
   const resetFilters = () => {
     setQ('')
@@ -173,6 +203,7 @@ export function JobsFeedPage() {
     setLocation('')
     setMinScore(String(MIN_RELEVANT_MATCH_SCORE))
     setSort('score')
+    setHideOutsideProfileGeos(DEFAULT_JOBS_FEED.hideOutsideProfileGeos)
     setActiveViewId(null)
   }
 
@@ -265,6 +296,27 @@ export function JobsFeedPage() {
       </div>
 
       <div className="mb-6 grid gap-4 rounded-xl border border-border/80 bg-card/30 p-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+        <div className="flex items-start gap-3 rounded-md border border-border/50 bg-muted/15 px-3 py-2.5 sm:col-span-2 lg:col-span-4 xl:col-span-6">
+          <Checkbox
+            id="geo-profile-filter"
+            checked={hideOutsideProfileGeos}
+            onCheckedChange={(c) => {
+              setHideOutsideProfileGeos(c === true)
+              if (activeViewId) setActiveViewId(null)
+            }}
+            className="mt-0.5"
+          />
+          <label
+            htmlFor="geo-profile-filter"
+            className="cursor-pointer text-sm leading-snug text-muted-foreground"
+          >
+            <span className="font-medium text-foreground">Match profile geographies</span>
+            {' — '}
+            When your Profile lists preferred regions, hide jobs that never mention any of them in the
+            title, location, or description. Turn off to see every saved role (e.g. US listings from a
+            company scan).
+          </label>
+        </div>
         <div className="sm:col-span-2 lg:col-span-2">
           <Label htmlFor="job-q" className="text-xs text-muted-foreground">
             Search

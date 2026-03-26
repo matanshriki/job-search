@@ -42,6 +42,7 @@ export const DEFAULT_JOBS_FEED: JobsFeedPersistedState = {
   location: '',
   minScore: String(MIN_RELEVANT_MATCH_SCORE),
   sort: 'score',
+  hideOutsideProfileGeos: true,
   activeViewId: null,
 }
 

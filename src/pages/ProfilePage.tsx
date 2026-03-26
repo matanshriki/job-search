@@ -182,6 +182,12 @@ export function ProfilePage() {
             </div>
             <div>
               <Label>Preferred geographies / locations</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                One line per keyword (e.g. <span className="font-mono">Israel</span>,{' '}
+                <span className="font-mono">Tel Aviv</span>, <span className="font-mono">Remote</span>).
+                Matching uses title, location, and description — not only the Location field. Jobs feed
+                can hide roles that never mention any of these terms.
+              </p>
               <Textarea
                 className="mt-1 min-h-[80px] font-mono text-xs"
                 value={preferredGeographies}

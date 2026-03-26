@@ -247,12 +247,27 @@ export function scoreDomainFit(
   }
 }
 
+/**
+ * True if the job text mentions at least one preferred geography term (title + location + description).
+ * Used by the jobs feed filter. Empty profile list → always true.
+ */
+export function jobMatchesPreferredGeographies(
+  job: Pick<Job, 'title' | 'location' | 'description'>,
+  profile: SearchProfile,
+): boolean {
+  if (!profile.preferredGeographies.length) return true
+  const blob = `${job.title} ${job.location} ${job.description}`.slice(0, 12000)
+  const h = norm(blob)
+  return profile.preferredGeographies.some((t) => t && h.includes(norm(t)))
+}
+
 export function scoreLocationFit(
-  job: Pick<Job, 'location' | 'description'>,
+  job: Pick<Job, 'title' | 'location' | 'description'>,
   profile: SearchProfile,
   max: number,
 ): { value: number; detail: string } {
-  const blob = `${job.location} ${job.description}`.slice(0, 6000)
+  /** Titles often contain country/region (e.g. "| United States"); location field alone misses that. */
+  const blob = `${job.title} ${job.location} ${job.description}`.slice(0, 8000)
   const remoteSignals = ['remote', 'anywhere', 'distributed', 'work from home']
   const hybridSignals = ['hybrid']
   const isRemote = includesAny(blob, remoteSignals)
@@ -274,16 +289,28 @@ export function scoreLocationFit(
     }
   }
 
-  const { score, hits } = overlapScore(blob, profile.preferredGeographies, max)
-  const adjusted = Math.min(max, score + prefBonus)
+  const h = norm(blob)
+  const hits = profile.preferredGeographies.filter((t) => t && h.includes(norm(t)))
+  if (hits.length > 0) {
+    const rawRatio = hits.length / profile.preferredGeographies.length
+    const base = Math.round(max * Math.min(1, rawRatio + 0.12))
+    const adjusted = Math.min(max, base + Math.min(prefBonus, 3))
+    return {
+      value: adjusted,
+      detail: `Location/geo match: ${hits.join(', ')}`,
+    }
+  }
+
+  /** No geography keyword hit: do not use the generic overlap “floor” — mismatch should score low. */
+  const cappedBonus = Math.min(prefBonus, isRemote ? 2 : 0)
+  const value = isRemote
+    ? Math.min(max, Math.round(max * 0.18) + cappedBonus)
+    : Math.min(max, Math.round(max * 0.06))
   return {
-    value: adjusted,
-    detail:
-      hits.length > 0
-        ? `Location/geo match: ${hits.join(', ')}`
-        : isRemote
-          ? 'Remote-friendly; no explicit geo keyword match.'
-          : 'Limited match to preferred geographies.',
+    value,
+    detail: isRemote
+      ? 'Remote role, but no match to your preferred geography keywords (title/location/description).'
+      : 'No match to preferred geographies — role looks tied to another region.',
   }
 }
 
@@ -497,6 +524,14 @@ export function scoreJobAgainstProfile(
   }
   if (s.value < w.seniority * 0.4) {
     redFlags.push('Seniority may be misaligned with your stated targets.')
+  }
+  if (
+    profile.preferredGeographies.length > 0 &&
+    !jobMatchesPreferredGeographies(job, profile)
+  ) {
+    redFlags.push(
+      'Location/title does not mention any preferred geography — confirm region before investing time.',
+    )
   }
 
   return {

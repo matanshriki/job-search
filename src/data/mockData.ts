@@ -365,6 +365,7 @@ export function buildMockAppData(): AppData {
         location: '',
         minScore: '70',
         sort: 'score',
+        hideOutsideProfileGeos: true,
       },
       {
         id: 'demo-view-remote',
@@ -376,6 +377,7 @@ export function buildMockAppData(): AppData {
         location: 'remote',
         minScore: '',
         sort: 'score',
+        hideOutsideProfileGeos: true,
       },
     ],
   }
