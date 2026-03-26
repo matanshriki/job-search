@@ -166,7 +166,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           : ''
       const whereNote =
         added > 0
-          ? ` Open Jobs Feed in the sidebar to review. If you do not see them, clear the Min score field (the feed hides roles below ${MIN_RELEVANT_MATCH_SCORE} by default).`
+          ? ` Open Jobs feed. If new roles don’t appear: they’re usually filtered out — clear Min score (default ${MIN_RELEVANT_MATCH_SCORE}+) or turn off “Match profile geographies” when titles don’t include your geo keywords.`
           : ''
       toast({
         title: result.ok ? 'Scan complete' : 'Scan finished with issues',
@@ -223,7 +223,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           : ''
       const pasteWhere =
         added > 0
-          ? ` Open Jobs Feed; clear Min score if new rows are hidden (default shows ${MIN_RELEVANT_MATCH_SCORE}+ matches only).`
+          ? ` Open Jobs feed. If new rows are missing: clear Min score or turn off “Match profile geographies” (same as after a scan).`
           : ''
       toast({
         title: result.ok ? 'HTML import complete' : 'HTML import incomplete',

@@ -207,6 +207,19 @@ export function JobsFeedPage() {
     setActiveViewId(null)
   }
 
+  /** Surface newly scanned jobs that fall below Min score or geo filter. */
+  const showAllSavedJobs = useCallback(() => {
+    setQ('')
+    setSource('all')
+    setStatus('all')
+    setCompany('')
+    setLocation('')
+    setMinScore('')
+    setSort('dateFound')
+    setHideOutsideProfileGeos(false)
+    setActiveViewId(null)
+  }, [])
+
   return (
     <>
       <PageHeader
@@ -459,11 +472,34 @@ export function JobsFeedPage() {
       </p>
 
       {filtered.length === 0 ? (
-        <EmptyState
-          icon={Briefcase}
-          title="No jobs match"
-          description="Relax filters or add roles from Companies / Manual Intake."
-        />
+        data.jobs.length > 0 ? (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.08] px-4 py-5 text-sm text-muted-foreground">
+            <p className="font-display text-base font-semibold text-foreground">
+              You have {data.jobs.length} saved job(s), but none match the current filters
+            </p>
+            <p className="mt-2 leading-relaxed">
+              After a scan, new roles are often hidden because: (1){' '}
+              <strong className="text-foreground">Min score</strong> defaults to {MIN_RELEVANT_MATCH_SCORE}
+              + while fresh matches can score lower; (2){' '}
+              <strong className="text-foreground">Match profile geographies</strong> hides roles whose
+              title/location line doesn’t include your keywords (e.g. Israel).
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={showAllSavedJobs}>
+                Show all saved jobs
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={resetFilters}>
+                Reset filters (defaults)
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <EmptyState
+            icon={Briefcase}
+            title="No jobs match"
+            description="Relax filters or add roles from Companies / Manual Intake."
+          />
+        )
       ) : (
         <div className="space-y-4">
           {filtered.map((j) => (
