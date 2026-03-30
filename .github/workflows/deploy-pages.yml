@@ -29,6 +29,8 @@ jobs:
       - uses: actions/configure-pages@v5
       - run: npm ci
       - run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
       - name: Ensure SPA 404 fallback for GitHub Pages
         run: |
           test -f dist/index.html

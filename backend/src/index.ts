@@ -60,8 +60,8 @@ app.use('/api/*', (_req, res) => {
   res.status(404).json({ ok: false, error: 'API route not found' })
 })
 
-// Start server
-const server = app.listen(PORT, '127.0.0.1', () => {
+// Start server — bind to 0.0.0.0 so Railway/containers can expose the port
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Job Search Backend running at http://localhost:${PORT}`)
   console.log(`   Health: http://localhost:${PORT}/api/health`)
   console.log(`   DB: ${process.env.DATABASE_URL ?? 'file:./data/job-search.db'}`)
