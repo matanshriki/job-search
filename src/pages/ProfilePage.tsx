@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -18,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SENIORITY_LABELS } from '@/domain/constants'
 import type { SearchProfile, SeniorityLevel } from '@/domain/types'
 import { useAppState } from '@/context/app-state'
+import { useApiState } from '@/context/api-state'
 
 function linesToList(s: string): string[] {
   return s
@@ -28,7 +30,13 @@ function linesToList(s: string): string[] {
 
 export function ProfilePage() {
   const { data, updateProfile, recalculateAllMatchScores } = useAppState()
+  const api = useApiState()
   const p = data.profile
+
+  // Identity fields (name, email, LinkedIn) from API profile
+  const [fullName, setFullName] = useState(api.profile?.fullName ?? '')
+  const [email, setEmail] = useState(api.profile?.email ?? '')
+  const [linkedinUrl, setLinkedinUrl] = useState(api.profile?.linkedinUrl ?? '')
 
   const [targetTitles, setTargetTitles] = useState(p.targetTitles.join('\n'))
   const [excludedTitles, setExcludedTitles] = useState(p.excludedTitles.join('\n'))
@@ -72,7 +80,8 @@ export function ProfilePage() {
       compensationNotes: compensationNotes.trim(),
       personalSummary: personalSummary.trim(),
     }
-    updateProfile(next)
+    // Merge identity fields so they are persisted to the DB
+    updateProfile({ ...next, fullName: fullName.trim(), email: email.trim(), linkedinUrl: linkedinUrl.trim() } as SearchProfile)
   }
 
   return (
@@ -119,6 +128,49 @@ export function ProfilePage() {
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Identity</CardTitle>
+            <CardDescription>
+              Your name and LinkedIn URL are embedded in AI-generated outreach and cover notes.
+              Email is never sent anywhere — it is stored locally only.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <Label htmlFor="full-name">Full name</Label>
+              <Input
+                id="full-name"
+                className="mt-1"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Jane Smith"
+              />
+            </div>
+            <div>
+              <Label htmlFor="email-field">Email (private)</Label>
+              <Input
+                id="email-field"
+                type="email"
+                className="mt-1"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="jane@example.com"
+              />
+            </div>
+            <div>
+              <Label htmlFor="linkedin-url">LinkedIn URL</Label>
+              <Input
+                id="linkedin-url"
+                className="mt-1"
+                value={linkedinUrl}
+                onChange={(e) => setLinkedinUrl(e.target.value)}
+                placeholder="https://linkedin.com/in/…"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Role targets</CardTitle>

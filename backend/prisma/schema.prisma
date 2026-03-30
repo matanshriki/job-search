@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id                      Int      @id @default(autoincrement())
+  fullName                String   @default("")
+  email                   String   @default("")
+  linkedinUrl             String   @default("")
+  currentLocation         String   @default("")
+  preferredLocationsJson  String   @default("[]")
+  preferredTitlesJson     String   @default("[]")
+  excludedTitlesJson      String   @default("[]")
+  targetKeywordsJson      String   @default("[]")
+  excludedKeywordsJson    String   @default("[]")
+  summary                 String   @default("")
+  seniorityLevel          String   @default("[]")
+  remotePreference        String   @default("flexible")
+  preferredFunctionsJson  String   @default("[]")
+  preferredIndustriesJson String   @default("[]")
+  idealCompanyStageJson   String   @default("[]")
+  compensationNotes       String   @default("")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@map("profile")
+}
+
+model Resume {
+  id           Int      @id @default(autoincrement())
+  title        String
+  rawText      String   @default("")
+  filePath     String   @default("")
+  isBaseResume Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  generatedAssets GeneratedAsset[]
+
+  @@map("resumes")
+}
+
+model TargetCompany {
+  id           Int      @id @default(autoincrement())
+  name         String
+  companyDomain String  @default("")
+  careersUrl   String   @default("")
+  priority     String   @default("medium")
+  notes        String   @default("")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sources     CompanySource[]
+  jobPostings JobPosting[]
+  scanRuns    ScanRun[]
+
+  @@map("target_companies")
+}
+
+model CompanySource {
+  id                Int           @id @default(autoincrement())
+  companyId         Int
+  sourceType        String        // greenhouse, lever, generic_html, manual
+  sourceUrl         String        @default("")
+  atsProvider       String        @default("")
+  parsingConfigJson String        @default("{}")
+  active            Boolean       @default(true)
+  lastCheckedAt     DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  company  TargetCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  scanRuns ScanRun[]
+
+  @@map("company_sources")
+}
+
+model JobPosting {
+  id               Int       @id @default(autoincrement())
+  companyId        Int?
+  externalJobId    String    @default("")
+  title            String
+  location         String    @default("")
+  department       String    @default("")
+  employmentType   String    @default("")
+  descriptionRaw   String    @default("")
+  descriptionClean String    @default("")
+  jobUrl           String    @default("")
+  sourceType       String    @default("manual_entry")
+  sourceProvider   String    @default("")
+  sourceLabel      String    @default("")
+  postedAt         DateTime?
+  discoveredAt     DateTime  @default(now())
+  isActive         Boolean   @default(true)
+  normalizedKey    String    @default("")
+  hashSignature    String    @default("")
+  // Pipeline tracking
+  status           String    @default("new")
+  notes            String    @default("")
+  tagsJson         String    @default("[]")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  company       TargetCompany?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  match         JobMatch?
+  generatedAssets GeneratedAsset[]
+  agentRuns     AgentRun[]
+  jobNotes      JobNote[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+
+  @@map("job_postings")
+}
+
+model JobMatch {
+  id                      Int      @id @default(autoincrement())
+  jobPostingId            Int      @unique
+  fitScore                Int      @default(0)
+  fitLabel                String   @default("low")
+  scoreBreakdownJson      String   @default("{}")
+  matchingReasonsJson     String   @default("[]")
+  concernsJson            String   @default("[]")
+  redFlagsJson            String   @default("[]")
+  fitSummary              String   @default("")
+  insightSnippet          String   @default("")
+  strengthsJson           String   @default("[]")
+  recommendedResumePointsJson String @default("[]")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  jobPosting JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+
+  @@map("job_matches")
+}
+
+model GeneratedAsset {
+  id           Int      @id @default(autoincrement())
+  jobPostingId Int
+  resumeId     Int?
+  assetType    String   // fit_analysis | resume_tailoring | outreach_message | cover_note | interview_prep | company_brief
+  content      String   @default("")
+  version      Int      @default(1)
+  modelName    String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  jobPosting JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  resume     Resume?    @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+
+  @@map("generated_assets")
+}
+
+model AgentRun {
+  id           Int       @id @default(autoincrement())
+  jobPostingId Int?
+  agentType    String    // scout | fit_analyst | resume_tailor | outreach | interview_prep
+  status       String    @default("pending")
+  inputJson    String    @default("{}")
+  outputJson   String    @default("{}")
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  errorMessage String    @default("")
+
+  jobPosting JobPosting? @relation(fields: [jobPostingId], references: [id], onDelete: SetNull)
+
+  @@map("agent_runs")
+}
+
+model ScanRun {
+  id               Int       @id @default(autoincrement())
+  companyId        Int?
+  sourceId         Int?
+  status           String    @default("running")
+  jobsFound        Int       @default(0)
+  jobsCreated      Int       @default(0)
+  jobsUpdated      Int       @default(0)
+  jobsMarkedInactive Int     @default(0)
+  method           String    @default("generic_html")
+  message          String    @default("")
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+  errorMessage     String    @default("")
+
+  company TargetCompany?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  source  CompanySource?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@map("scan_runs")
+}
+
+model Notification {
+  id           Int       @id @default(autoincrement())
+  jobPostingId Int?
+  channel      String    @default("in_app")
+  message      String
+  status       String    @default("unread")
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  jobPosting JobPosting? @relation(fields: [jobPostingId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}
+
+model JobNote {
+  id           Int      @id @default(autoincrement())
+  jobPostingId Int
+  noteType     String   @default("general")
+  content      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  jobPosting JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+
+  @@map("job_notes")
+}
+
+model ActivityLog {
+  id           Int      @id @default(autoincrement())
+  entityType   String
+  entityId     String
+  action       String
+  metadataJson String   @default("{}")
+  createdAt    DateTime @default(now())
+
+  jobPostingId Int?
+  jobPosting   JobPosting? @relation(fields: [jobPostingId], references: [id], onDelete: SetNull)
+
+  @@map("activity_logs")
+}
+
+model AppSettings {
+  id                    Int      @id @default(autoincrement())
+  minRelevantScore      Int      @default(55)
+  autoScanIntervalHours Int      @default(6)
+  autoRunFitAnalysis    Boolean  @default(true)
+  fitAnalysisThreshold  Int      @default(55)
+  jobsFeedJson          String   @default("{}")
+  savedJobViewsJson     String   @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("app_settings")
+}

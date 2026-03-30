@@ -87,7 +87,7 @@ export function ManualIntakePage() {
       location: location.trim() || undefined,
       description: description.trim(),
       sourceType: 'linkedin_manual',
-      linkedInUrl: clean || undefined,
+      sourceUrl: clean || undefined,
     })
     setTitle('')
     setCompany('')

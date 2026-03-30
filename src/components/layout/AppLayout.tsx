@@ -1,17 +1,24 @@
 import {
+  Activity,
   Briefcase,
   Building2,
   ClipboardList,
   Database,
+  FileText,
   LayoutDashboard,
   PlusCircle,
+  Server,
+  Sparkles,
   UserRound,
+  Wifi,
+  WifiOff,
 } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { useAppState } from '@/context/app-state-compat'
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,10 +26,22 @@ const nav = [
   { to: '/companies', label: 'Companies', icon: Building2 },
   { to: '/intake', label: 'Manual Intake', icon: PlusCircle },
   { to: '/profile', label: 'Profile', icon: UserRound },
+]
+
+const agentNav = [
+  { to: '/resumes', label: 'Resume Library', icon: FileText },
+  { to: '/assets', label: 'Generated Assets', icon: Sparkles },
+  { to: '/agent-runs', label: 'Agent Runs', icon: Activity },
+  { to: '/source-health', label: 'Source Health', icon: Server },
+]
+
+const toolsNav = [
   { to: '/data', label: 'Import / Export', icon: Database },
 ]
 
 export function AppLayout() {
+  const { loading, backendAvailable } = useAppState()
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex min-h-screen">
@@ -36,11 +55,13 @@ export function AppLayout() {
                 Job Search
               </p>
               <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Command Center
+                Agent Copilot
               </p>
             </div>
           </div>
-          <nav className="flex flex-1 flex-col gap-0.5 p-3">
+
+          <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
+            {/* Main nav */}
             {nav.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
@@ -59,30 +80,99 @@ export function AppLayout() {
                 {label}
               </NavLink>
             ))}
+
+            {/* Agent section */}
+            <div className="mt-4 mb-1 px-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                Agent Layer
+              </p>
+            </div>
+            {agentNav.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+                    isActive
+                      ? 'bg-primary/12 text-primary shadow-sm ring-1 ring-primary/15'
+                      : 'text-muted-foreground hover:bg-white/[0.04] hover:text-foreground',
+                  )
+                }
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+              </NavLink>
+            ))}
+
+            {/* Tools section */}
+            <div className="mt-4 mb-1 px-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                Tools
+              </p>
+            </div>
+            {toolsNav.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+                    isActive
+                      ? 'bg-primary/12 text-primary shadow-sm ring-1 ring-primary/15'
+                      : 'text-muted-foreground hover:bg-white/[0.04] hover:text-foreground',
+                  )
+                }
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+              </NavLink>
+            ))}
           </nav>
-          <div className="mt-auto border-t border-white/[0.06] p-4">
-            <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/35 bg-primary/[0.06] px-3 py-2">
-              <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                Local-first
-              </Badge>
+
+          <div className="mt-auto border-t border-white/[0.06] p-4 space-y-2">
+            {loading ? (
+              <div className="flex items-center gap-2 rounded-lg border border-dashed border-white/10 bg-white/[0.03] px-3 py-2">
+                <div className="h-2 w-2 animate-pulse rounded-full bg-primary/50" />
+                <span className="text-xs text-muted-foreground">Connecting to backend…</span>
+              </div>
+            ) : backendAvailable ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="cursor-help text-xs text-muted-foreground">All data stays in this browser.</span>
+                  <div className="flex cursor-help items-center gap-2 rounded-lg border border-dashed border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2">
+                    <Wifi className="h-3.5 w-3.5 text-emerald-500/70" />
+                    <span className="text-xs text-muted-foreground">Backend connected</span>
+                    <Badge variant="outline" className="ml-auto text-[10px] uppercase tracking-wide text-emerald-500 border-emerald-500/30">
+                      Live
+                    </Badge>
+                  </div>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="max-w-xs bg-card text-card-foreground border-border">
-                  Nothing is sent to a server. Export JSON regularly for backups.
+                  Connected to local backend at localhost:3001. Data stored in SQLite.
                 </TooltipContent>
               </Tooltip>
-            </div>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex cursor-help items-center gap-2 rounded-lg border border-dashed border-amber-500/30 bg-amber-500/[0.06] px-3 py-2">
+                    <WifiOff className="h-3.5 w-3.5 text-amber-500/70" />
+                    <span className="text-xs text-muted-foreground">Backend offline</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs bg-card text-card-foreground border-border">
+                  Backend not reachable. Run: cd backend && npm run dev
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col border-l border-white/[0.04] bg-background/30">
           <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-white/[0.06] bg-background/75 px-4 backdrop-blur-md lg:hidden">
-            <span className="font-display text-sm font-semibold">Job Search Command Center</span>
+            <span className="font-display text-sm font-semibold">Job Search Copilot</span>
             <Separator orientation="vertical" className="h-6" />
             <nav className="flex flex-1 gap-1 overflow-x-auto">
-              {nav.map(({ to, label }) => (
+              {[...nav, ...agentNav, ...toolsNav].map(({ to, label }) => (
                 <NavLink
                   key={to}
                   to={to}

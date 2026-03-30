@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Backend secrets and local data — never commit these
+backend/.env
+backend/data/
+backend/prisma/data/
+*.db
+*.db-shm
+*.db-wal
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

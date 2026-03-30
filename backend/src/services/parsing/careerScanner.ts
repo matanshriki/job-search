@@ -1,0 +1,250 @@
+/**
+ * Career page scanner — Node.js server-side version.
+ * No browser dependencies; uses native fetch (Node 18+).
+ */
+
+import { extractGreenhouseBoardToken, fetchGreenhouseJobs, greenhouseJobToNormalized, isLikelyGreenhousePage } from './greenhouse'
+import { parseGenericJobListHtml } from './genericHtml'
+
+export type ScanMethod = 'greenhouse_api' | 'lever_api' | 'generic_html' | 'cors_blocked' | 'paste_html' | 'manual'
+
+export interface NormalizedJobDraft {
+  title: string
+  company: string
+  location: string
+  department: string | null
+  employmentType: string | null
+  description: string
+  sourceType: string
+  sourceLabel: string
+  sourceUrl: string
+  datePosted: string | null
+  normalizedKey: string
+}
+
+export interface CareerScanResult {
+  ok: boolean
+  method: ScanMethod
+  message: string
+  jobs: NormalizedJobDraft[]
+  warnings: string[]
+}
+
+export function jobDuplicateKey(company: string, title: string, location: string): string {
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60)
+  return `${norm(company)}|${norm(title)}|${norm(location)}`
+}
+
+/** Fetch HTML of a career page server-side (no CORS restrictions) */
+async function fetchCareerPageHtml(
+  url: string,
+): Promise<{ ok: true; html: string; finalUrl: string } | { ok: false; error: string }> {
+  const https = url.startsWith('https')
+  const agentOptions: Record<string, unknown> = {}
+
+  if (https && process.env.JOB_SEARCH_ALLOW_INSECURE_TLS === '1') {
+    // Import node:https only when needed
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Agent } = require('node:https') as typeof import('node:https')
+    agentOptions.agent = new Agent({ rejectUnauthorized: false })
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; JobSearchBot/1.0)',
+        'Accept': 'text/html,application/xhtml+xml,*/*',
+      },
+      ...agentOptions,
+    })
+
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status} when fetching career page.` }
+    }
+
+    const html = await res.text()
+    return { ok: true, html, finalUrl: res.url || url }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, error: msg }
+  }
+}
+
+export async function scanCompanyCareerPage(options: {
+  careerPageUrl: string
+  companyName: string
+}): Promise<CareerScanResult> {
+  const { careerPageUrl, companyName } = options
+  const warnings: string[] = []
+
+  // 1. Try Greenhouse API first
+  const tokenFromUrl = extractGreenhouseBoardToken(careerPageUrl)
+  if (tokenFromUrl) {
+    const gh = await fetchGreenhouseJobs(tokenFromUrl)
+    if (gh.ok) {
+      const jobs: NormalizedJobDraft[] = gh.jobs.map((j) => {
+        const n = greenhouseJobToNormalized(j, companyName)
+        return {
+          ...n,
+          sourceType: 'greenhouse',
+          sourceLabel: 'Greenhouse',
+          sourceUrl: n.sourceUrl || careerPageUrl,
+          normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
+        }
+      })
+      return {
+        ok: jobs.length > 0,
+        method: 'greenhouse_api',
+        message: jobs.length > 0
+          ? `Loaded ${jobs.length} roles from Greenhouse public API.`
+          : 'Greenhouse board returned zero jobs.',
+        jobs,
+        warnings,
+      }
+    }
+    warnings.push(gh.error)
+  }
+
+  // 2. Try to Fetch HTML (server-side, no CORS issue)
+  const fetched = await fetchCareerPageHtml(careerPageUrl)
+  if (!fetched.ok) {
+    return {
+      ok: false,
+      method: 'generic_html',
+      jobs: [],
+      warnings,
+      message: `Could not fetch career page: ${fetched.error}`,
+    }
+  }
+
+  const { html, finalUrl } = fetched
+
+  // 3. Check if fetched page is Greenhouse
+  if (tokenFromUrl || isLikelyGreenhousePage(html, finalUrl)) {
+    const embedded = extractGreenhouseBoardToken(html) ?? tokenFromUrl
+    if (embedded) {
+      const gh = await fetchGreenhouseJobs(embedded)
+      if (gh.ok) {
+        const jobs: NormalizedJobDraft[] = gh.jobs.map((j) => {
+          const n = greenhouseJobToNormalized(j, companyName)
+          return {
+            ...n,
+            sourceType: 'greenhouse',
+            sourceLabel: 'Greenhouse',
+            sourceUrl: n.sourceUrl || finalUrl,
+            normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
+          }
+        })
+        if (jobs.length > 0) {
+          return {
+            ok: true,
+            method: 'greenhouse_api',
+            message: `Detected Greenhouse; loaded ${jobs.length} roles.`,
+            jobs,
+            warnings,
+          }
+        }
+      } else {
+        warnings.push(gh.error)
+      }
+    }
+  }
+
+  // 4. Generic HTML parse
+  const generic = parseGenericJobListHtml(html, finalUrl)
+  warnings.push(...generic.warnings)
+
+  const jobs: NormalizedJobDraft[] = generic.jobs.map((g) => ({
+    title: g.title,
+    company: companyName,
+    location: g.locationHint ?? 'Unspecified',
+    department: null,
+    employmentType: null,
+    description: g.title,
+    sourceType: 'company_career_page',
+    sourceLabel: 'Company Career Page',
+    sourceUrl: g.sourceUrl,
+    datePosted: null,
+    normalizedKey: jobDuplicateKey(companyName, g.title, g.locationHint ?? 'Unspecified'),
+  }))
+
+  return {
+    ok: jobs.length > 0,
+    method: 'generic_html',
+    message: jobs.length > 0
+      ? `Parsed approximately ${jobs.length} role links from HTML (heuristic; verify results).`
+      : 'Generic HTML parse found no confident job listings.',
+    jobs,
+    warnings,
+  }
+}
+
+export async function scanFromPastedHtml(options: {
+  html: string
+  baseUrl: string
+  companyName: string
+}): Promise<CareerScanResult> {
+  const { html, baseUrl, companyName } = options
+  const warnings: string[] = []
+
+  const token = extractGreenhouseBoardToken(html) || extractGreenhouseBoardToken(baseUrl)
+  if (token) {
+    const gh = await fetchGreenhouseJobs(token)
+    if (gh.ok) {
+      const jobs: NormalizedJobDraft[] = gh.jobs.map((j) => {
+        const n = greenhouseJobToNormalized(j, companyName)
+        return {
+          ...n,
+          sourceType: 'greenhouse',
+          sourceLabel: 'Greenhouse',
+          sourceUrl: n.sourceUrl || baseUrl,
+          normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
+        }
+      })
+      return {
+        ok: jobs.length > 0,
+        method: 'paste_html',
+        message: jobs.length > 0
+          ? `Resolved Greenhouse board from pasted content; loaded ${jobs.length} roles.`
+          : 'Greenhouse board returned zero jobs.',
+        jobs,
+        warnings,
+      }
+    }
+    warnings.push(gh.error)
+  }
+
+  const generic = parseGenericJobListHtml(html, baseUrl)
+  warnings.push(...generic.warnings)
+
+  const jobs: NormalizedJobDraft[] = generic.jobs.map((g) => ({
+    title: g.title,
+    company: companyName,
+    location: g.locationHint ?? 'Unspecified',
+    department: null,
+    employmentType: null,
+    description: g.title,
+    sourceType: 'company_career_page',
+    sourceLabel: 'Company Career Page',
+    sourceUrl: g.sourceUrl,
+    datePosted: null,
+    normalizedKey: jobDuplicateKey(companyName, g.title, g.locationHint ?? 'Unspecified'),
+  }))
+
+  return {
+    ok: jobs.length > 0,
+    method: 'paste_html',
+    message: jobs.length > 0
+      ? `Imported ${jobs.length} listings from pasted HTML.`
+      : 'Could not extract listings from pasted HTML.',
+    jobs,
+    warnings,
+  }
+}
