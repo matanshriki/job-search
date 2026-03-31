@@ -4,9 +4,10 @@
  */
 
 import { extractGreenhouseBoardToken, fetchGreenhouseJobs, greenhouseJobToNormalized, isLikelyGreenhousePage } from './greenhouse'
+import { extractLeverToken, fetchLeverJobs, leverJobToNormalized, isLikelyLeverPage } from './lever'
 import { parseGenericJobListHtml } from './genericHtml'
 
-export type ScanMethod = 'greenhouse_api' | 'lever_api' | 'generic_html' | 'cors_blocked' | 'paste_html' | 'manual'
+export type ScanMethod = 'greenhouse_api' | 'lever_api' | 'ashby_api' | 'generic_html' | 'cors_blocked' | 'paste_html' | 'manual'
 
 export interface NormalizedJobDraft {
   title: string
@@ -84,7 +85,7 @@ export async function scanCompanyCareerPage(options: {
   const { careerPageUrl, companyName } = options
   const warnings: string[] = []
 
-  // 1. Try Greenhouse API first
+  // 1. Try Greenhouse API (token in URL)
   const tokenFromUrl = extractGreenhouseBoardToken(careerPageUrl)
   if (tokenFromUrl) {
     const gh = await fetchGreenhouseJobs(tokenFromUrl)
@@ -112,7 +113,35 @@ export async function scanCompanyCareerPage(options: {
     warnings.push(gh.error)
   }
 
-  // 2. Try to Fetch HTML (server-side, no CORS issue)
+  // 2. Try Lever API (token in URL)
+  const leverTokenFromUrl = extractLeverToken(careerPageUrl)
+  if (leverTokenFromUrl) {
+    const lv = await fetchLeverJobs(leverTokenFromUrl)
+    if (lv.ok) {
+      const jobs: NormalizedJobDraft[] = lv.jobs.map((j) => {
+        const n = leverJobToNormalized(j, companyName)
+        return {
+          ...n,
+          sourceType: 'greenhouse',
+          sourceLabel: 'Lever',
+          sourceUrl: n.sourceUrl || careerPageUrl,
+          normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
+        }
+      })
+      return {
+        ok: jobs.length > 0,
+        method: 'lever_api',
+        message: jobs.length > 0
+          ? `Loaded ${jobs.length} roles from Lever public API.`
+          : 'Lever board returned zero jobs.',
+        jobs,
+        warnings,
+      }
+    }
+    warnings.push(lv.error)
+  }
+
+  // 3. Fetch HTML (server-side, no CORS issue)
   const fetched = await fetchCareerPageHtml(careerPageUrl)
   if (!fetched.ok) {
     return {
@@ -126,7 +155,7 @@ export async function scanCompanyCareerPage(options: {
 
   const { html, finalUrl } = fetched
 
-  // 3. Check if fetched page is Greenhouse
+  // 4. Check if fetched HTML is Greenhouse
   if (tokenFromUrl || isLikelyGreenhousePage(html, finalUrl)) {
     const embedded = extractGreenhouseBoardToken(html) ?? tokenFromUrl
     if (embedded) {
@@ -157,7 +186,34 @@ export async function scanCompanyCareerPage(options: {
     }
   }
 
-  // 4. Generic HTML parse
+  // 5. Check if fetched HTML is Lever
+  if (leverTokenFromUrl || isLikelyLeverPage(html, finalUrl)) {
+    const embedded = extractLeverToken(html) ?? leverTokenFromUrl
+    if (embedded) {
+      const lv = await fetchLeverJobs(embedded)
+      if (lv.ok && lv.jobs.length > 0) {
+        const jobs: NormalizedJobDraft[] = lv.jobs.map((j) => {
+          const n = leverJobToNormalized(j, companyName)
+          return {
+            ...n,
+            sourceType: 'greenhouse',
+            sourceLabel: 'Lever',
+            sourceUrl: n.sourceUrl || finalUrl,
+            normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
+          }
+        })
+        return {
+          ok: true,
+          method: 'lever_api',
+          message: `Detected Lever; loaded ${jobs.length} roles.`,
+          jobs,
+          warnings,
+        }
+      }
+    }
+  }
+
+  // 6. Generic HTML parse (fallback)
   const generic = parseGenericJobListHtml(html, finalUrl)
   warnings.push(...generic.warnings)
 
