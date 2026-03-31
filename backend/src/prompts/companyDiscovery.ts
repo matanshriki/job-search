@@ -21,7 +21,7 @@ export function buildCompanyDiscoveryMessages(profile: SearchProfile) {
 
   const system =
     'You are a job search advisor helping a senior executive discover relevant companies. ' +
-    'Return ONLY a valid JSON array — no markdown fences, no explanations, no extra text.'
+    'Return ONLY valid JSON matching the exact schema requested — no markdown, no extra text.'
 
   const user = [
     'Suggest 20 B2B SaaS or enterprise software companies that are highly likely to have open',
@@ -44,15 +44,17 @@ export function buildCompanyDiscoveryMessages(profile: SearchProfile) {
     '- Has a publicly accessible career page with a real URL',
     '- Mix: global companies with remote roles + Israeli companies',
     '',
-    'Return a JSON array. Each item must have exactly these fields:',
-    '[',
-    '  {',
-    '    "name": "Company Name",',
-    '    "careersUrl": "https://actual-careers-page-url.com/careers",',
-    '    "whyRelevant": "One sentence why this company fits the profile",',
-    '    "priority": "high" or "medium"',
-    '  }',
-    ']',
+    'Return a JSON object with this exact structure:',
+    '{',
+    '  "companies": [',
+    '    {',
+    '      "name": "Company Name",',
+    '      "careersUrl": "https://actual-careers-page-url.com/careers",',
+    '      "whyRelevant": "One sentence why this company fits the profile",',
+    '      "priority": "high" or "medium"',
+    '    }',
+    '  ]',
+    '}',
     '',
     'Mark "high": companies known for strong PS/Partner/CS orgs, Israeli companies, or where leadership hiring is frequent.',
     'Mark "medium": solid fit but less certain about current role availability.',

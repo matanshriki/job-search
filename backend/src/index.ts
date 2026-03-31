@@ -34,11 +34,14 @@ app.use(express.urlencoded({ extended: true }))
 app.get('/api/health', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`
+    const aiEnabled = !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'mock')
     res.json({
       ok: true,
       status: 'healthy',
       timestamp: new Date().toISOString(),
       version: '0.1.0',
+      ai: aiEnabled ? 'enabled' : 'mock',
+      model: aiEnabled ? (process.env.AI_MODEL || 'gpt-4o-mini') : null,
     })
   } catch (e) {
     res.status(503).json({ ok: false, status: 'unhealthy', error: String(e) })

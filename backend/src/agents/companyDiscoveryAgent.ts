@@ -72,17 +72,12 @@ export async function runCompanyDiscoveryAgent(): Promise<CompanyDiscoveryResult
       }
     }
 
-    // Extract JSON array from AI response (may have surrounding text)
+    // Parse JSON object with { companies: [...] } shape
     const content = response.content.trim()
-    const jsonStart = content.indexOf('[')
-    const jsonEnd = content.lastIndexOf(']')
-    if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error('AI response did not contain a JSON array')
-    }
+    const parsed = JSON.parse(content) as { companies?: CompanyDiscoverySuggestion[] }
+    const raw = parsed.companies ?? (Array.isArray(parsed) ? parsed : [])
 
-    const raw = JSON.parse(content.slice(jsonStart, jsonEnd + 1)) as CompanyDiscoverySuggestion[]
-
-    const suggestions: CompanyDiscoverySuggestion[] = raw
+    const suggestions: CompanyDiscoverySuggestion[] = (raw as CompanyDiscoverySuggestion[])
       .filter((s) => s && typeof s.name === 'string' && typeof s.careersUrl === 'string')
       .map((s) => ({
         name: String(s.name).trim(),
