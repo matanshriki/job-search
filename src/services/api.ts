@@ -14,9 +14,10 @@ async function request<T>(
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
   })
-  const json = await res.json() as { ok: boolean; error?: string } & T
+  const json = await res.json() as { ok: boolean; error?: string; message?: string } & T
   if (!res.ok || !json.ok) {
-    throw new Error(json.error ?? `API error ${res.status}`)
+    // Some endpoints (e.g. scan) return failure details in `message`, not `error`
+    throw new Error(json.error ?? json.message ?? `API error ${res.status}`)
   }
   return json
 }

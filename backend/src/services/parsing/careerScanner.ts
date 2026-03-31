@@ -101,11 +101,11 @@ export async function scanCompanyCareerPage(options: {
         }
       })
       return {
-        ok: jobs.length > 0,
+        ok: true,
         method: 'greenhouse_api',
         message: jobs.length > 0
           ? `Loaded ${jobs.length} roles from Greenhouse public API.`
-          : 'Greenhouse board returned zero jobs.',
+          : 'Greenhouse board returned zero open roles.',
         jobs,
         warnings,
       }
@@ -122,18 +122,18 @@ export async function scanCompanyCareerPage(options: {
         const n = leverJobToNormalized(j, companyName)
         return {
           ...n,
-          sourceType: 'greenhouse',
+          sourceType: 'lever',
           sourceLabel: 'Lever',
           sourceUrl: n.sourceUrl || careerPageUrl,
           normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
         }
       })
       return {
-        ok: jobs.length > 0,
+        ok: true,
         method: 'lever_api',
         message: jobs.length > 0
           ? `Loaded ${jobs.length} roles from Lever public API.`
-          : 'Lever board returned zero jobs.',
+          : 'Lever board returned zero open roles.',
         jobs,
         warnings,
       }
@@ -171,14 +171,14 @@ export async function scanCompanyCareerPage(options: {
             normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
           }
         })
-        if (jobs.length > 0) {
-          return {
-            ok: true,
-            method: 'greenhouse_api',
-            message: `Detected Greenhouse; loaded ${jobs.length} roles.`,
-            jobs,
-            warnings,
-          }
+        return {
+          ok: true,
+          method: 'greenhouse_api',
+          message: jobs.length > 0
+            ? `Detected Greenhouse; loaded ${jobs.length} roles.`
+            : 'Greenhouse board detected but returned zero open roles.',
+          jobs,
+          warnings,
         }
       } else {
         warnings.push(gh.error)
@@ -191,12 +191,12 @@ export async function scanCompanyCareerPage(options: {
     const embedded = extractLeverToken(html) ?? leverTokenFromUrl
     if (embedded) {
       const lv = await fetchLeverJobs(embedded)
-      if (lv.ok && lv.jobs.length > 0) {
+      if (lv.ok) {
         const jobs: NormalizedJobDraft[] = lv.jobs.map((j) => {
           const n = leverJobToNormalized(j, companyName)
           return {
             ...n,
-            sourceType: 'greenhouse',
+            sourceType: 'lever',
             sourceLabel: 'Lever',
             sourceUrl: n.sourceUrl || finalUrl,
             normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
@@ -205,7 +205,9 @@ export async function scanCompanyCareerPage(options: {
         return {
           ok: true,
           method: 'lever_api',
-          message: `Detected Lever; loaded ${jobs.length} roles.`,
+          message: jobs.length > 0
+            ? `Detected Lever; loaded ${jobs.length} roles.`
+            : 'Lever board detected but returned zero open roles.',
           jobs,
           warnings,
         }
@@ -232,11 +234,11 @@ export async function scanCompanyCareerPage(options: {
   }))
 
   return {
-    ok: jobs.length > 0,
+    ok: true,
     method: 'generic_html',
     message: jobs.length > 0
       ? `Parsed approximately ${jobs.length} role links from HTML (heuristic; verify results).`
-      : 'Generic HTML parse found no confident job listings.',
+      : 'No job listings found in static HTML — the page may be JavaScript-rendered. Try "Paste HTML" instead: open the careers page in your browser, copy the full page HTML, and paste it here.',
     jobs,
     warnings,
   }
@@ -265,11 +267,11 @@ export async function scanFromPastedHtml(options: {
         }
       })
       return {
-        ok: jobs.length > 0,
+        ok: true,
         method: 'paste_html',
         message: jobs.length > 0
           ? `Resolved Greenhouse board from pasted content; loaded ${jobs.length} roles.`
-          : 'Greenhouse board returned zero jobs.',
+          : 'Greenhouse board returned zero open roles.',
         jobs,
         warnings,
       }
@@ -295,11 +297,11 @@ export async function scanFromPastedHtml(options: {
   }))
 
   return {
-    ok: jobs.length > 0,
+    ok: true,
     method: 'paste_html',
     message: jobs.length > 0
       ? `Imported ${jobs.length} listings from pasted HTML.`
-      : 'Could not extract listings from pasted HTML.',
+      : 'Could not extract job listings from the pasted HTML. Make sure to paste the full rendered page source (not a partial snippet).',
     jobs,
     warnings,
   }

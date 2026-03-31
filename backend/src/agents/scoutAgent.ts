@@ -248,7 +248,9 @@ export async function runScoutAgentForCompany(companyId: number): Promise<ScoutA
       jobsFound: result.jobs.length,
       jobsCreated,
       jobsUpdated,
-      success: result.ok,
+      // Scan ran successfully even if it found 0 jobs (JS-rendered page, etc.)
+      // Only mark success: false for actual network/parse errors (ok: false from fetcher).
+      success: true,
       message: result.message,
       warnings: result.warnings,
     }

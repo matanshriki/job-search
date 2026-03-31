@@ -138,7 +138,12 @@ router.post('/:id/scan', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
     const result = await runScoutAgentForCompany(id)
-    res.json({ ok: result.success, ...result })
+    res.json({
+      ok: result.success,
+      // Expose message as error so the frontend API client surfaces it
+      ...(result.success ? {} : { error: result.message }),
+      ...result,
+    })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })
   }
