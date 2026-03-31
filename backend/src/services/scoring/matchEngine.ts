@@ -262,11 +262,28 @@ export function scoreDomainFit(
   }
 }
 
+/**
+ * True if the job is a plausible geography match for the profile.
+ *
+ * Rules (in order):
+ * 1. Empty preferred list → always true.
+ * 2. Remote-eligible jobs pass automatically when the user is open to remote
+ *    (remotePreference !== 'onsite_ok'). Avoids hiding remote roles just because
+ *    the user didn't explicitly type "Remote" in their geography list.
+ * 3. At least one preferred geography term appears in title or location line.
+ */
 export function jobMatchesPreferredGeographies(
-  job: { title: string; location: string },
+  job: { title: string; location: string; description?: string },
   profile: SearchProfile,
 ): boolean {
   if (!profile.preferredGeographies.length) return true
+
+  if (profile.remotePreference !== 'onsite_ok') {
+    const remoteSignals = ['remote', 'anywhere', 'distributed', 'work from home', 'work-from-home']
+    const blob = `${job.title} ${job.location} ${job.description ?? ''}`.slice(0, 4000).toLowerCase()
+    if (remoteSignals.some((s) => blob.includes(s))) return true
+  }
+
   const headline = `${job.title} ${job.location}`.slice(0, 8000)
   const h = norm(headline)
   return profile.preferredGeographies.some((t) => t && h.includes(norm(t)))

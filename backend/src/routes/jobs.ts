@@ -63,7 +63,10 @@ router.get('/', async (req, res) => {
         const profile = buildProfileFromDb(profileRow)
         if (profile.preferredGeographies.length > 0) {
           filtered = filtered.filter((j) =>
-            jobMatchesPreferredGeographies({ title: j.title, location: j.location }, profile),
+            jobMatchesPreferredGeographies(
+              { title: j.title, location: j.location, description: j.descriptionClean || j.descriptionRaw },
+              profile,
+            ),
           )
         }
       }

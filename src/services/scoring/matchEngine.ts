@@ -248,16 +248,29 @@ export function scoreDomainFit(
 }
 
 /**
- * True if at least one preferred geography term appears in the job **title or location** (not the
- * full description). Company career pages often list every country in long HTML; matching the full
- * body lets unrelated regions pass (e.g. UK role while the page mentions Israel elsewhere).
- * Empty profile list → always true.
+ * True if the job is a plausible geography match for the profile.
+ *
+ * Rules (in order):
+ * 1. Empty preferred list → always true (no restriction).
+ * 2. Remote-eligible jobs pass automatically when the user is open to remote
+ *    (remotePreference !== 'onsite_ok'). This avoids incorrectly hiding remote
+ *    roles just because the user didn't type "Remote" in their geography list.
+ * 3. At least one preferred geography term appears in the job title or location
+ *    (not the full description — long HTML pages often mention many countries).
  */
 export function jobMatchesPreferredGeographies(
   job: Pick<Job, 'title' | 'location' | 'description'>,
   profile: SearchProfile,
 ): boolean {
   if (!profile.preferredGeographies.length) return true
+
+  // Remote-eligible jobs pass when the user isn't strictly onsite-only
+  if (profile.remotePreference !== 'onsite_ok') {
+    const remoteSignals = ['remote', 'anywhere', 'distributed', 'work from home', 'work-from-home']
+    const blob = `${job.title} ${job.location} ${job.description}`.slice(0, 4000).toLowerCase()
+    if (remoteSignals.some((s) => blob.includes(s))) return true
+  }
+
   const headline = `${job.title} ${job.location}`.slice(0, 8000)
   const h = norm(headline)
   return profile.preferredGeographies.some((t) => t && h.includes(norm(t)))
