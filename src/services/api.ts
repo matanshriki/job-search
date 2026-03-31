@@ -114,6 +114,12 @@ export const agentsApi = {
     return get<{ runs: ApiScanRun[] }>(`/api/agents/scan-runs${qs}`)
   },
   scanAll: () => post<{ results: ApiScanResult[] }>('/api/agents/scan-all'),
+  discoverCompanies: () =>
+    post<{
+      suggestions: ApiCompanySuggestion[]
+      source: 'ai' | 'curated'
+      message: string
+    }>('/api/agents/discover-companies'),
   getStatus: () => get<ApiAgentsStatus>('/api/agents/status'),
   getAllAssets: (params?: { assetType?: string; limit?: string }) => {
     const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
@@ -268,6 +274,13 @@ export interface ApiGeneratedAsset {
   createdAt: string
   updatedAt: string
   jobPosting?: { id: number; title: string; companyId: number | null }
+}
+
+export interface ApiCompanySuggestion {
+  name: string
+  careersUrl: string
+  whyRelevant: string
+  priority: 'high' | 'medium'
 }
 
 export interface ApiAgentRun {

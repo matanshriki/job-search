@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import prisma from '../db/client'
 import { runScoutAgentForAllCompanies } from '../agents/scoutAgent'
+import { runCompanyDiscoveryAgent } from '../agents/companyDiscoveryAgent'
 import { isAiEnabled } from '../services/aiService'
 
 const router = Router()
@@ -48,6 +49,18 @@ router.post('/scan-all', async (_req, res) => {
   try {
     const results = await runScoutAgentForAllCompanies()
     res.json({ ok: true, results })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) })
+  }
+})
+
+// POST /api/agents/discover-companies
+// Returns AI-suggested (or curated) company recommendations based on the user's profile.
+// Does NOT add companies — returns suggestions for the user to review first.
+router.post('/discover-companies', async (_req, res) => {
+  try {
+    const result = await runCompanyDiscoveryAgent()
+    res.json({ ok: true, ...result })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })
   }

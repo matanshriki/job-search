@@ -1,10 +1,11 @@
 import { formatDistanceToNow } from 'date-fns'
-import { ChevronDown, Loader2, Plus, ScanSearch } from 'lucide-react'
+import { ChevronDown, ExternalLink, Loader2, Plus, ScanSearch, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { COMPANY_PRIORITY_LABEL } from '@/domain/constants'
 import type { CompanyPriority, TrackedCompany } from '@/domain/types'
 import { useAppState } from '@/context/app-state'
+import { agentsApi, type ApiCompanySuggestion } from '@/services/api'
+import { useToast } from '@/hooks/use-toast'
 import { formatDate } from '@/lib/utils'
 
 const emptyForm = {
@@ -41,6 +44,7 @@ const emptyForm = {
 export function CompaniesPage() {
   const { data, addCompany, updateCompany, deleteCompany, scanCompany, pasteHtmlForCompany } =
     useAppState()
+  const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [editing, setEditing] = useState<TrackedCompany | null>(null)
@@ -48,6 +52,79 @@ export function CompaniesPage() {
   const [pasteOpenId, setPasteOpenId] = useState<string | null>(null)
   const [pasteHtml, setPasteHtml] = useState('')
   const [pasteBaseUrl, setPasteBaseUrl] = useState('')
+
+  // ── Company Discovery state ──────────────────────────────────────────────────
+  const [discoverOpen, setDiscoverOpen] = useState(false)
+  const [discoverLoading, setDiscoverLoading] = useState(false)
+  const [discoverSource, setDiscoverSource] = useState<'ai' | 'curated' | null>(null)
+  const [discoverMessage, setDiscoverMessage] = useState('')
+  const [suggestions, setSuggestions] = useState<ApiCompanySuggestion[]>([])
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set())
+  const [addingCompanies, setAddingCompanies] = useState(false)
+
+  const trackedNames = new Set(data.companies.map((c) => c.name.toLowerCase()))
+
+  const openDiscover = async () => {
+    setDiscoverOpen(true)
+    setDiscoverLoading(true)
+    setSuggestions([])
+    setSelectedSuggestions(new Set())
+    setDiscoverSource(null)
+    try {
+      const result = await agentsApi.discoverCompanies()
+      setSuggestions(result.suggestions)
+      setDiscoverSource(result.source)
+      setDiscoverMessage(result.message)
+      // Pre-select all suggestions that aren't already tracked
+      const preselected = new Set(
+        result.suggestions
+          .filter((s) => !trackedNames.has(s.name.toLowerCase()))
+          .map((s) => s.name),
+      )
+      setSelectedSuggestions(preselected)
+    } catch (e) {
+      toast({ title: 'Discovery failed', description: String(e), variant: 'destructive' })
+      setDiscoverOpen(false)
+    } finally {
+      setDiscoverLoading(false)
+    }
+  }
+
+  const toggleSuggestion = (name: string) => {
+    setSelectedSuggestions((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  const addSelectedCompanies = async () => {
+    const toAdd = suggestions.filter((s) => selectedSuggestions.has(s.name))
+    if (!toAdd.length) return
+    setAddingCompanies(true)
+    try {
+      for (const s of toAdd) {
+        await addCompany({
+          name: s.name,
+          website: s.careersUrl.replace(/\/careers.*$/, '').replace(/\/jobs.*$/, ''),
+          careerPageUrl: s.careersUrl,
+          notes: s.whyRelevant,
+          priority: s.priority === 'high' ? 'high' : 'medium',
+        })
+      }
+      toast({
+        title: `${toAdd.length} companies added`,
+        description: 'Go to each company card and click "Scan jobs" to fetch open roles.',
+        variant: 'success',
+      })
+      setDiscoverOpen(false)
+    } catch (e) {
+      toast({ title: 'Failed to add companies', description: String(e), variant: 'destructive' })
+    } finally {
+      setAddingCompanies(false)
+    }
+  }
 
   const relevantForCompany = (companyId: string) =>
     data.jobs.filter((j) => j.companyId === companyId && j.score >= 65).length
@@ -116,6 +193,11 @@ export function CompaniesPage() {
         title="Companies tracker"
         description="Track employers, store career URLs, and run scans. On GitHub Pages, scans use a public CORS relay when the browser is blocked; dev uses the local Vite proxy. Paste HTML still works everywhere."
         actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={openDiscover}>
+              <Sparkles className="h-4 w-4" />
+              Discover companies
+            </Button>
           <Dialog
             open={open}
             onOpenChange={(v) => {
@@ -221,14 +303,151 @@ export function CompaniesPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
         }
       />
+
+      {/* ── Company Discovery modal ─────────────────────────────────────────── */}
+      <Dialog open={discoverOpen} onOpenChange={setDiscoverOpen}>
+        <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-2xl">
+          <DialogHeader className="border-b border-border/60 px-6 py-4">
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Discover relevant companies
+            </DialogTitle>
+            <DialogDescription>
+              {discoverLoading
+                ? 'Analyzing your profile and finding relevant companies…'
+                : discoverSource === 'ai'
+                  ? `AI-personalized · ${discoverMessage}`
+                  : discoverSource === 'curated'
+                    ? `Curated list · ${discoverMessage}`
+                    : 'Select companies to add to your tracker.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {discoverLoading ? (
+              <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm">Fetching company suggestions…</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {/* Select / deselect all */}
+                <div className="flex items-center justify-between pb-2 text-xs text-muted-foreground">
+                  <span>
+                    {selectedSuggestions.size} of {suggestions.filter((s) => !trackedNames.has(s.name.toLowerCase())).length} new companies selected
+                  </span>
+                  <div className="flex gap-3">
+                    <button
+                      className="underline underline-offset-2 hover:text-foreground"
+                      onClick={() =>
+                        setSelectedSuggestions(
+                          new Set(
+                            suggestions
+                              .filter((s) => !trackedNames.has(s.name.toLowerCase()))
+                              .map((s) => s.name),
+                          ),
+                        )
+                      }
+                    >
+                      Select all new
+                    </button>
+                    <button
+                      className="underline underline-offset-2 hover:text-foreground"
+                      onClick={() => setSelectedSuggestions(new Set())}
+                    >
+                      Deselect all
+                    </button>
+                  </div>
+                </div>
+
+                {suggestions.map((s) => {
+                  const alreadyTracked = trackedNames.has(s.name.toLowerCase())
+                  const isSelected = selectedSuggestions.has(s.name)
+                  return (
+                    <div
+                      key={s.name}
+                      className={`flex items-start gap-3 rounded-lg border px-4 py-3 transition-colors ${
+                        alreadyTracked
+                          ? 'border-border/40 bg-muted/20 opacity-60'
+                          : isSelected
+                            ? 'border-primary/40 bg-primary/5'
+                            : 'border-border/60 hover:border-border'
+                      }`}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        disabled={alreadyTracked}
+                        onCheckedChange={() => !alreadyTracked && toggleSuggestion(s.name)}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium leading-tight">{s.name}</span>
+                          <Badge
+                            variant={s.priority === 'high' ? 'default' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {s.priority}
+                          </Badge>
+                          {alreadyTracked && (
+                            <Badge variant="outline" className="text-xs">
+                              already tracked
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                          {s.whyRelevant}
+                        </p>
+                        <a
+                          href={s.careersUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {s.careersUrl.replace(/^https?:\/\//, '').slice(0, 50)}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="border-t border-border/60 px-6 py-4">
+            <Button variant="outline" onClick={() => setDiscoverOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={addSelectedCompanies}
+              disabled={selectedSuggestions.size === 0 || addingCompanies || discoverLoading}
+            >
+              {addingCompanies ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Adding…
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" />
+                  Add {selectedSuggestions.size} {selectedSuggestions.size === 1 ? 'company' : 'companies'}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {data.companies.length === 0 ? (
         <EmptyState
           icon={ScanSearch}
           title="No companies tracked"
-          description="Add employers you care about. Use Greenhouse board URLs for the most reliable scans."
+          description='Add employers you care about, or click "Discover companies" to get AI-powered suggestions based on your profile.'
         />
       ) : (
         <div className="grid gap-4">
