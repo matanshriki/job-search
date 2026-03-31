@@ -1,4 +1,4 @@
-import { BookmarkPlus, Briefcase, Trash2 } from 'lucide-react'
+import { BookmarkPlus, Briefcase, Loader2, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { JobCard } from '@/components/job/JobCard'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { useToast } from '@/hooks/use-toast'
 import { DEFAULT_JOBS_FEED, JOB_STATUS_LABELS, MIN_RELEVANT_MATCH_SCORE } from '@/domain/constants'
 import { JOB_SOURCE_LABELS } from '@/domain/types'
 import type { JobSourceType, JobStatus, JobsFeedSort, SavedJobsView } from '@/domain/types'
@@ -35,8 +36,27 @@ function filtersFromView(v: SavedJobsView) {
 }
 
 export function JobsFeedPage() {
-  const { data, updateJobsFeed, saveJobView, deleteJobView } = useAppState()
+  const { data, updateJobsFeed, saveJobView, deleteJobView, deleteJob } = useAppState()
+  const { toast } = useToast()
   const hydrated = useRef(false)
+
+  // ── Bulk selection ───────────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
+
+  // Clear selection whenever the filtered list changes (filter applied, etc.)
+  // so stale selections don't carry over to a different result set.
+  const filteredIds = useMemo(() => new Set<string>(), []) // populated below
 
   const [q, setQ] = useState('')
   const [source, setSource] = useState<string>('all')
@@ -194,6 +214,48 @@ export function JobsFeedPage() {
     sort,
     hideOutsideProfileGeos,
   ])
+
+  // Populate filteredIds for select-all (must be after filtered is computed)
+  // We do this imperatively so we don't need a second useMemo dep chain.
+  filteredIds.clear()
+  filtered.forEach((j) => filteredIds.add(j.id))
+
+  const allVisibleSelected =
+    filteredIds.size > 0 && filtered.every((j) => selectedIds.has(j.id))
+
+  const selectAllVisible = () =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      filtered.forEach((j) => next.add(j.id))
+      return next
+    })
+
+  const deselectAllVisible = () =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      filtered.forEach((j) => next.delete(j.id))
+      return next
+    })
+
+  const bulkDelete = async () => {
+    const ids = [...selectedIds]
+    if (!ids.length) return
+    setBulkDeleting(true)
+    try {
+      for (const id of ids) {
+        await deleteJob(id)
+      }
+      toast({
+        title: `${ids.length} ${ids.length === 1 ? 'job' : 'jobs'} deleted`,
+        variant: 'success',
+      })
+      clearSelection()
+    } catch (e) {
+      toast({ title: 'Delete failed', description: String(e), variant: 'destructive' })
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
 
   const resetFilters = () => {
     setQ('')
@@ -461,15 +523,59 @@ export function JobsFeedPage() {
         </div>
       </div>
 
-      <p className="mb-4 text-sm text-muted-foreground">
-        Showing <span className="font-medium text-foreground">{filtered.length}</span> of{' '}
-        {data.jobs.length} jobs
-        {activeViewId ? (
-          <span className="ml-2 text-primary">
-            · View: {savedViews.find((v) => v.id === activeViewId)?.name ?? '—'}
-          </span>
-        ) : null}
-      </p>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Showing <span className="font-medium text-foreground">{filtered.length}</span> of{' '}
+          {data.jobs.length} jobs
+          {activeViewId ? (
+            <span className="ml-2 text-primary">
+              · View: {savedViews.find((v) => v.id === activeViewId)?.name ?? '—'}
+            </span>
+          ) : null}
+        </p>
+        {filtered.length > 0 && (
+          <button
+            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            onClick={allVisibleSelected ? deselectAllVisible : selectAllVisible}
+          >
+            {allVisibleSelected ? 'Deselect all' : `Select all ${filtered.length}`}
+          </button>
+        )}
+      </div>
+
+      {/* Sticky bulk-action bar */}
+      {selectedIds.size > 0 && (
+        <div className="sticky top-4 z-20 mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <Checkbox
+              checked={allVisibleSelected}
+              onCheckedChange={(v) => (v ? selectAllVisible() : deselectAllVisible())}
+            />
+            <span className="text-sm font-medium">
+              {selectedIds.size} {selectedIds.size === 1 ? 'job' : 'jobs'} selected
+            </span>
+            <button
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              onClick={clearSelection}
+            >
+              Clear
+            </button>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={bulkDelete}
+            disabled={bulkDeleting}
+          >
+            {bulkDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+            Delete {selectedIds.size} {selectedIds.size === 1 ? 'job' : 'jobs'}
+          </Button>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         data.jobs.length > 0 ? (
@@ -503,7 +609,16 @@ export function JobsFeedPage() {
       ) : (
         <div className="space-y-4">
           {filtered.map((j) => (
-            <JobCard key={j.id} job={j} />
+            <div key={j.id} className="flex items-start gap-3">
+              <Checkbox
+                checked={selectedIds.has(j.id)}
+                onCheckedChange={() => toggleSelect(j.id)}
+                className="mt-4 shrink-0"
+              />
+              <div className={`min-w-0 flex-1 transition-opacity ${selectedIds.has(j.id) ? 'opacity-70' : ''}`}>
+                <JobCard job={j} />
+              </div>
+            </div>
           ))}
         </div>
       )}
