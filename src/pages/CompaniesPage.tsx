@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from 'date-fns'
-import { ChevronDown, ExternalLink, Loader2, Plus, ScanSearch, Sparkles } from 'lucide-react'
+import { ChevronDown, ExternalLink, Loader2, Plus, ScanSearch, Sparkles, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
@@ -52,6 +52,40 @@ export function CompaniesPage() {
   const [pasteOpenId, setPasteOpenId] = useState<string | null>(null)
   const [pasteHtml, setPasteHtml] = useState('')
   const [pasteBaseUrl, setPasteBaseUrl] = useState('')
+
+  // ── Bulk selection state ─────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const selectAll = () => setSelectedIds(new Set(data.companies.map((c) => c.id)))
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const bulkDelete = async () => {
+    if (!selectedIds.size) return
+    setBulkDeleting(true)
+    try {
+      for (const id of selectedIds) {
+        await deleteCompany(id)
+      }
+      toast({
+        title: `${selectedIds.size} ${selectedIds.size === 1 ? 'company' : 'companies'} removed`,
+        variant: 'success',
+      })
+      clearSelection()
+    } catch (e) {
+      toast({ title: 'Delete failed', description: String(e), variant: 'destructive' })
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
 
   // ── Company Discovery state ──────────────────────────────────────────────────
   const [discoverOpen, setDiscoverOpen] = useState(false)
@@ -443,6 +477,40 @@ export function CompaniesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Bulk action bar (appears when ≥1 company selected) ──────────────── */}
+      {selectedIds.size > 0 && (
+        <div className="sticky top-4 z-20 flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <Checkbox
+              checked={selectedIds.size === data.companies.length}
+              onCheckedChange={(v) => (v ? selectAll() : clearSelection())}
+            />
+            <span className="text-sm font-medium">
+              {selectedIds.size} of {data.companies.length} selected
+            </span>
+            <button
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              onClick={clearSelection}
+            >
+              Clear
+            </button>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={bulkDelete}
+            disabled={bulkDeleting}
+          >
+            {bulkDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+            Delete {selectedIds.size} {selectedIds.size === 1 ? 'company' : 'companies'}
+          </Button>
+        </div>
+      )}
+
       {data.companies.length === 0 ? (
         <EmptyState
           icon={ScanSearch}
@@ -451,13 +519,37 @@ export function CompaniesPage() {
         />
       ) : (
         <div className="grid gap-4">
+          {/* Select-all row */}
+          <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+            <Checkbox
+              checked={selectedIds.size > 0 && selectedIds.size === data.companies.length}
+              onCheckedChange={(v) => (v ? selectAll() : clearSelection())}
+            />
+            <span
+              className="cursor-pointer select-none hover:text-foreground"
+              onClick={() => (selectedIds.size === data.companies.length ? clearSelection() : selectAll())}
+            >
+              {selectedIds.size === data.companies.length && data.companies.length > 0
+                ? 'Deselect all'
+                : 'Select all'}
+            </span>
+          </div>
           {data.companies.map((c) => {
             const jCount = data.jobs.filter((j) => j.companyId === c.id).length
             const rel = relevantForCompany(c.id)
             return (
-              <Card key={c.id}>
+              <Card
+                key={c.id}
+                className={selectedIds.has(c.id) ? 'border-primary/50 bg-primary/[0.03]' : ''}
+              >
                 <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
+                  <div className="flex min-w-0 items-start gap-3">
+                    <Checkbox
+                      checked={selectedIds.has(c.id)}
+                      onCheckedChange={() => toggleSelect(c.id)}
+                      className="mt-1 shrink-0"
+                    />
+                    <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <CardTitle className="font-display text-lg">{c.name}</CardTitle>
                       <Badge variant="outline">{COMPANY_PRIORITY_LABEL[c.priority]}</Badge>
@@ -465,6 +557,7 @@ export function CompaniesPage() {
                     <p className="mt-1 text-sm text-muted-foreground break-all">
                       {c.careerPageUrl}
                     </p>
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -552,6 +645,7 @@ export function CompaniesPage() {
                     </Button>
                   </div>
                 </CardHeader>
+
                 <CardContent className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground/80">
