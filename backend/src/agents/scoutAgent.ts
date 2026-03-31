@@ -80,10 +80,16 @@ export async function runScoutAgentForCompany(companyId: number): Promise<ScoutA
     let jobsCreated = 0
     let jobsUpdated = 0
     const foundKeys = new Set<string>()
+    // Track keys created during this scan to prevent inserting the same title twice
+    // when the parser returns duplicates (e.g., the same nav link in multiple page sections)
+    const createdThisScan = new Set<string>()
 
     for (const draft of result.jobs) {
       const key = draft.normalizedKey || jobDuplicateKey(draft.company, draft.title, draft.location)
       foundKeys.add(key)
+
+      // Skip if already handled in this scan pass
+      if (createdThisScan.has(key)) continue
 
       const existing = existingKeyMap.get(key)
       const scoreResult = scoreJobAgainstProfile(
@@ -196,6 +202,7 @@ export async function runScoutAgentForCompany(companyId: number): Promise<ScoutA
           })
         }
 
+        createdThisScan.add(key)
         jobsCreated++
       }
     }

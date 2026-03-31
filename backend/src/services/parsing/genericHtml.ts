@@ -34,14 +34,33 @@ const GEO_TERMS = new Set([
 // Words that strongly suggest a real job title
 const ROLE_WORDS = /\b(engineer|manager|director|head|vp|vice president|analyst|lead|specialist|coordinator|developer|designer|architect|consultant|advisor|executive|officer|president|associate|senior|junior|staff|principal|product|data|sales|marketing|operations|success|service|support|partner|delivery|program|project|account|business|strategy|talent|people|finance|legal|security|devops|qa|research|scientist|recruiter|hr|technical|solutions|implementation|onboarding|enablement|representative|intern)\b/i
 
+// Common non-English nav phrases that appear on career pages with multiple locales
+const NON_ENGLISH_NAV = new Set([
+  'ontdek carrières', 'découvrir les emplois', 'emplois', 'karriere entdecken',
+  'carrières', 'stellenangebote', 'vagas', 'empleos', 'offres d\'emploi',
+  'bekijk vacatures', 'vacatures', 'posizioni aperte', 'opportunités',
+  'découvrir', 'postuler', 'voir les offres', 'alle stellen',
+])
+
 function looksLikeJobTitle(text: string): boolean {
   const lower = text.toLowerCase().trim()
+
+  // Reject known non-English nav phrases
+  if (NON_ENGLISH_NAV.has(lower)) return false
 
   // Reject pure geographic/nav terms
   if (GEO_TERMS.has(lower)) return false
 
-  // Reject if it's a single word with no role indicator
   const words = text.trim().split(/\s+/)
+
+  // Reject non-ASCII-heavy text with no recognizable role keyword.
+  // Real English job titles are almost entirely ASCII; nav text in Dutch/French/
+  // German/etc. often has accented characters (è, ê, ë, ü, ö, ã, …).
+  const nonAscii = (text.match(/[^\x00-\x7F]/g) ?? []).length
+  const nonAsciiRatio = nonAscii / text.length
+  if (nonAsciiRatio > 0.08 && !ROLE_WORDS.test(text)) return false
+
+  // Reject if it's a single word with no role indicator
   if (words.length === 1 && !ROLE_WORDS.test(text)) return false
 
   // Must be multi-word OR contain a clear role keyword
