@@ -180,21 +180,21 @@ cross-functional stakeholder management, B2B SaaS, team building, revenue operat
     {
       name: 'monday.com',
       companyDomain: 'monday.com',
-      careersUrl: 'https://boards.greenhouse.io/mondaydotcom',
+      careersUrl: 'https://monday.com/careers',
       priority: 'high' as const,
       notes: 'Israeli SaaS company, strong culture. PM position.',
     },
     {
       name: 'Wiz',
       companyDomain: 'wiz.io',
-      careersUrl: 'https://boards.greenhouse.io/wizsecurity',
+      careersUrl: 'https://www.wiz.io/careers',
       priority: 'high' as const,
       notes: 'Cloud security unicorn, rapid growth.',
     },
     {
       name: 'HiBob',
       companyDomain: 'hibob.com',
-      careersUrl: 'https://boards.greenhouse.io/hibob',
+      careersUrl: 'https://www.hibob.com/careers',
       priority: 'medium' as const,
       notes: 'HR tech platform, Israel-based.',
     },
@@ -208,7 +208,7 @@ cross-functional stakeholder management, B2B SaaS, team building, revenue operat
     await prisma.companySource.create({
       data: {
         companyId: company.id,
-        sourceType: 'greenhouse',
+        sourceType: 'generic_html',
         sourceUrl: c.careersUrl,
         active: true,
       },
