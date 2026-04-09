@@ -33,6 +33,9 @@ export function setupPassport() {
           const name = profile.displayName ?? ''
           const avatarUrl = profile.photos?.[0]?.value ?? ''
 
+          const existingUser = await prisma.user.findUnique({ where: { googleId: profile.id } })
+          const isNewUser = !existingUser
+
           const user = await prisma.user.upsert({
             where: { googleId: profile.id },
             update: { name, avatarUrl, email },
@@ -44,7 +47,25 @@ export function setupPassport() {
             },
           })
 
-          // Create default profile + settings on first login
+          if (isNewUser) {
+            // Check if there is unclaimed data under the system user (id=1).
+            // This happens when the app was seeded or used before auth was enabled.
+            // Reassign everything to the new real user automatically.
+            const SYSTEM_USER_ID = 1
+            const systemHasData = await prisma.targetCompany.count({ where: { userId: SYSTEM_USER_ID } })
+
+            if (systemHasData > 0) {
+              await prisma.$transaction([
+                prisma.targetCompany.updateMany({ where: { userId: SYSTEM_USER_ID }, data: { userId: user.id } }),
+                prisma.profile.updateMany({ where: { userId: SYSTEM_USER_ID }, data: { userId: user.id } }),
+                prisma.resume.updateMany({ where: { userId: SYSTEM_USER_ID }, data: { userId: user.id } }),
+                prisma.appSettings.updateMany({ where: { userId: SYSTEM_USER_ID }, data: { userId: user.id } }),
+              ])
+              console.log(`  ✓ Migrated system data → userId=${user.id} (${email})`)
+            }
+          }
+
+          // Create default profile + settings on first login if still missing
           const existingProfile = await prisma.profile.findFirst({
             where: { userId: user.id },
           })
