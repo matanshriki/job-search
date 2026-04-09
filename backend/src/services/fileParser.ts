@@ -1,6 +1,10 @@
 /**
  * Parses PDF and DOCX files into plain text.
- * Uses dynamic imports so failures here don't crash the app at startup.
+ *
+ * PDF: uses `unpdf` which is backed by the WASM build of PDF.js —
+ *      no browser globals (DOMMatrix, Path2D, etc.) required.
+ * DOCX: uses `mammoth`, lazy-loaded inside the function so it
+ *       doesn't crash the process at startup if it fails to load.
  */
 
 const PDF_MIME = 'application/pdf'
@@ -14,10 +18,9 @@ export function isSupportedMime(mime: string): mime is SupportedMimeType {
 
 export async function parseFileToText(buffer: Buffer, mimeType: string): Promise<string> {
   if (mimeType === PDF_MIME) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
-    const result = await pdfParse(buffer)
-    return result.text.trim()
+    const { extractText } = await import('unpdf')
+    const { text } = await extractText(new Uint8Array(buffer), { mergePages: true })
+    return text.trim()
   }
 
   if (mimeType === DOCX_MIME) {
