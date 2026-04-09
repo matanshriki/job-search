@@ -3,7 +3,7 @@ import prisma from '../db/client'
 import { requireAuth } from '../middleware/auth'
 import { runScoutAgentForAllCompanies } from '../agents/scoutAgent'
 import { runCompanyDiscoveryAgent } from '../agents/companyDiscoveryAgent'
-import { isAiEnabled } from '../services/aiService'
+import { isAiEnabled, callAi } from '../services/aiService'
 
 const router = Router()
 router.use(requireAuth)
@@ -72,6 +72,63 @@ router.post('/scan-all', async (req, res) => {
 router.post('/discover-companies', async (req, res) => {
   try {
     const result = await runCompanyDiscoveryAgent(req.userId)
+    res.json({ ok: true, ...result })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) })
+  }
+})
+
+// POST /api/agents/infer-careers-url — AI-infers a company's ATS careers URL from the name
+router.post('/infer-careers-url', async (req, res) => {
+  try {
+    const { companyName } = req.body as { companyName?: string }
+    if (!companyName?.trim()) {
+      return res.status(400).json({ ok: false, error: 'companyName is required' })
+    }
+
+    const messages = [
+      {
+        role: 'system' as const,
+        content:
+          'You are a recruiting researcher. Given a company name, return the most likely direct careers/jobs URL. ' +
+          'Prefer ATS board URLs (Greenhouse, Lever, Ashby, Workable) over generic /careers pages. ' +
+          'Return ONLY valid JSON — no markdown, no extra text.',
+      },
+      {
+        role: 'user' as const,
+        content: [
+          `Find the careers page URL for: "${companyName.trim()}"`,
+          '',
+          'ATS URL patterns to prefer:',
+          '- Greenhouse: https://boards.greenhouse.io/{board-token}',
+          '- Lever: https://jobs.lever.co/{company-slug}',
+          '- Ashby: https://jobs.ashbyhq.com/{company-slug}',
+          '- Workable: https://apply.workable.com/{company-slug}',
+          '',
+          'Return:',
+          '{',
+          '  "careersUrl": "https://...",',
+          '  "atsProvider": "greenhouse" | "lever" | "ashby" | "workable" | "other",',
+          '  "companyDomain": "company.com",',
+          '  "confidence": "high" | "medium" | "low"',
+          '}',
+        ].join('\n'),
+      },
+    ]
+
+    const response = await callAi(messages, undefined, 400)
+
+    if (response.modelUsed === 'mock') {
+      return res.status(503).json({ ok: false, error: 'AI not configured. Add OPENAI_API_KEY to use URL inference.' })
+    }
+
+    const result = JSON.parse(response.content) as {
+      careersUrl: string
+      atsProvider: string
+      companyDomain: string
+      confidence: string
+    }
+
     res.json({ ok: true, ...result })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })

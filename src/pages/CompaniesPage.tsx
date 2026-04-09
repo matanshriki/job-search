@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from 'date-fns'
-import { ChevronDown, ExternalLink, Loader2, Plus, ScanSearch, Sparkles, Trash2 } from 'lucide-react'
+import { ChevronDown, ExternalLink, Loader2, Plus, ScanSearch, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { useState } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
@@ -84,6 +84,33 @@ export function CompaniesPage() {
       toast({ title: 'Delete failed', description: String(e), variant: 'destructive' })
     } finally {
       setBulkDeleting(false)
+    }
+  }
+
+  const [inferringUrl, setInferringUrl] = useState(false)
+
+  const handleInferUrl = async () => {
+    if (!form.name.trim()) {
+      toast({ title: 'Enter a company name first', variant: 'destructive' })
+      return
+    }
+    setInferringUrl(true)
+    try {
+      const result = await agentsApi.inferCareersUrl(form.name.trim())
+      setForm((f) => ({
+        ...f,
+        careerPageUrl: result.careersUrl,
+        website: f.website || result.companyDomain,
+      }))
+      toast({
+        title: `Found ${result.atsProvider !== 'other' ? result.atsProvider.charAt(0).toUpperCase() + result.atsProvider.slice(1) + ' board' : 'careers page'}`,
+        description: `Confidence: ${result.confidence}. Review the URL before saving.`,
+        variant: 'success',
+      })
+    } catch (e) {
+      toast({ title: 'Could not infer URL', description: String(e), variant: 'destructive' })
+    } finally {
+      setInferringUrl(false)
     }
   }
 
@@ -277,13 +304,25 @@ export function CompaniesPage() {
                 </div>
                 <div>
                   <Label htmlFor="co-career">Career page URL</Label>
-                  <Input
-                    id="co-career"
-                    value={form.careerPageUrl}
-                    onChange={(e) => setForm((f) => ({ ...f, careerPageUrl: e.target.value }))}
-                    className="mt-1"
-                    placeholder="https://boards.greenhouse.io/your-slug"
-                  />
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      id="co-career"
+                      value={form.careerPageUrl}
+                      onChange={(e) => setForm((f) => ({ ...f, careerPageUrl: e.target.value }))}
+                      placeholder="https://boards.greenhouse.io/your-slug"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="shrink-0"
+                      title="Auto-detect careers URL from company name"
+                      onClick={() => void handleInferUrl()}
+                      disabled={inferringUrl}
+                    >
+                      {inferringUrl ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                    </Button>
+                  </div>
                   <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
                     {import.meta.env.DEV ? (
                       <>

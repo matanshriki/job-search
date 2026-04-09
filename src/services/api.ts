@@ -95,6 +95,21 @@ export const jobsApi = {
 
 // ─── Resumes ──────────────────────────────────────────────────────────────────
 
+export interface ApiExtractedProfile {
+  fullName: string
+  email: string
+  linkedinUrl: string
+  personalSummary: string
+  targetTitles: string[]
+  targetSeniority: string[]
+  preferredFunctions: string[]
+  preferredIndustries: string[]
+  preferredGeographies: string[]
+  keywordsBoost: string[]
+  remotePreference: 'remote_first' | 'hybrid_ok' | 'onsite_ok' | 'flexible'
+  idealCompanyStage: string[]
+}
+
 export const resumesApi = {
   list: () => get<{ resumes: ApiResume[] }>('/api/resumes'),
   get: (id: number) => get<{ resume: ApiResume }>(`/api/resumes/${id}`),
@@ -103,6 +118,30 @@ export const resumesApi = {
   update: (id: number, data: Partial<ApiResume>) =>
     put<{ resume: ApiResume }>(`/api/resumes/${id}`, data),
   delete: (id: number) => del(`/api/resumes/${id}`),
+
+  upload: async (file: File, title?: string, isBaseResume?: boolean): Promise<{ resume: ApiResume; charCount: number }> => {
+    const form = new FormData()
+    form.append('file', file)
+    if (title) form.append('title', title)
+    if (isBaseResume) form.append('isBaseResume', 'true')
+    const token = localStorage.getItem('job-search-auth-token')
+    const res = await fetch(`${API_BASE}/api/resumes/upload`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    })
+    if (res.status === 401) {
+      localStorage.removeItem('job-search-auth-token')
+      window.dispatchEvent(new Event('auth:expired'))
+      throw new Error('Session expired. Please log in again.')
+    }
+    const json = await res.json() as { ok: boolean; error?: string; resume: ApiResume; charCount: number }
+    if (!res.ok || !json.ok) throw new Error(json.error ?? `Upload failed: ${res.status}`)
+    return json
+  },
+
+  extractProfile: (id: number) =>
+    post<{ extracted: ApiExtractedProfile }>(`/api/resumes/${id}/extract-profile`),
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -140,6 +179,11 @@ export const agentsApi = {
   getSettings: () => get<{ settings: ApiAppSettings }>('/api/agents/settings'),
   updateSettings: (data: Partial<ApiAppSettings>) =>
     put<{ settings: ApiAppSettings }>('/api/agents/settings', data),
+  inferCareersUrl: (companyName: string) =>
+    post<{ careersUrl: string; atsProvider: string; companyDomain: string; confidence: string }>(
+      '/api/agents/infer-careers-url',
+      { companyName },
+    ),
 }
 
 // ─── Import/Export ────────────────────────────────────────────────────────────
