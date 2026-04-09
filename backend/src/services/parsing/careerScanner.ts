@@ -78,11 +78,24 @@ async function fetchCareerPageHtml(
   }
 }
 
+/** Build candidate fallback URLs from a company domain */
+function buildFallbackUrls(companyDomain: string): string[] {
+  const domain = companyDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')
+  if (!domain) return []
+  return [
+    `https://${domain}/careers`,
+    `https://${domain}/jobs`,
+    `https://www.${domain}/careers`,
+    `https://www.${domain}/jobs`,
+  ]
+}
+
 export async function scanCompanyCareerPage(options: {
   careerPageUrl: string
   companyName: string
+  companyDomain?: string
 }): Promise<CareerScanResult> {
-  const { careerPageUrl, companyName } = options
+  const { careerPageUrl, companyName, companyDomain } = options
   const warnings: string[] = []
 
   // 1. Try Greenhouse API (token in URL)
@@ -142,7 +155,21 @@ export async function scanCompanyCareerPage(options: {
   }
 
   // 3. Fetch HTML (server-side, no CORS issue)
-  const fetched = await fetchCareerPageHtml(careerPageUrl)
+  let fetched = await fetchCareerPageHtml(careerPageUrl)
+
+  // 3a. If the configured URL failed and it looks like a boards.greenhouse.io URL
+  //     (i.e. a wrong/guessed board token), fall back to the company's real domain.
+  if (!fetched.ok && tokenFromUrl && companyDomain) {
+    warnings.push(`Career page URL failed (${fetched.error}). Trying company domain as fallback.`)
+    for (const fallback of buildFallbackUrls(companyDomain)) {
+      const attempt = await fetchCareerPageHtml(fallback)
+      if (attempt.ok) {
+        fetched = attempt
+        break
+      }
+    }
+  }
+
   if (!fetched.ok) {
     return {
       ok: false,

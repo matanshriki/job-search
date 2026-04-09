@@ -68,6 +68,7 @@ export async function runScoutAgentForCompany(companyId: number): Promise<ScoutA
     const result = await scanCompanyCareerPage({
       careerPageUrl: careersUrl,
       companyName: company.name,
+      companyDomain: company.companyDomain || undefined,
     })
 
     // Get existing job keys for this company
