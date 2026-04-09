@@ -9,7 +9,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { resumesApi, profileApi, type ApiResume, type ApiExtractedProfile } from '@/services/api'
+import { resumesApi, type ApiResume, type ApiExtractedProfile } from '@/services/api'
+import { useAppState } from '@/context/app-state'
 import { useToast } from '@/hooks/use-toast'
 import { formatDate } from '@/lib/utils'
 
@@ -29,6 +30,7 @@ function ExtractProfileDialog({
   onApplied: () => void
 }) {
   const { toast } = useToast()
+  const { updateProfile, data } = useAppState()
   const [extracting, setExtracting] = useState(false)
   const [applying, setApplying] = useState(false)
   const [extracted, setExtracted] = useState<ApiExtractedProfile | null>(null)
@@ -49,23 +51,23 @@ function ExtractProfileDialog({
     if (!extracted) return
     setApplying(true)
     try {
-      await profileApi.update({
-        fullName: extracted.fullName || undefined,
-        email: extracted.email || undefined,
-        linkedinUrl: extracted.linkedinUrl || undefined,
-        personalSummary: extracted.personalSummary,
-        targetTitles: extracted.targetTitles,
-        targetSeniority: extracted.targetSeniority as never,
-        preferredFunctions: extracted.preferredFunctions,
-        preferredIndustries: extracted.preferredIndustries,
-        preferredGeographies: extracted.preferredGeographies,
-        keywordsBoost: extracted.keywordsBoost,
-        keywordsPenalize: [],
+      // Merge extracted fields into the existing profile so we don't overwrite
+      // fields the user has set that the CV doesn't mention (e.g. keywordsPenalize)
+      await updateProfile({
+        ...data.profile,
+        ...(extracted.fullName && { fullName: extracted.fullName }),
+        ...(extracted.email && { email: extracted.email }),
+        ...(extracted.linkedinUrl && { linkedinUrl: extracted.linkedinUrl }),
+        personalSummary: extracted.personalSummary || data.profile.personalSummary,
+        targetTitles: extracted.targetTitles.length ? extracted.targetTitles : data.profile.targetTitles,
+        targetSeniority: extracted.targetSeniority.length ? extracted.targetSeniority as never : data.profile.targetSeniority,
+        preferredFunctions: extracted.preferredFunctions.length ? extracted.preferredFunctions : data.profile.preferredFunctions,
+        preferredIndustries: extracted.preferredIndustries.length ? extracted.preferredIndustries : data.profile.preferredIndustries,
+        preferredGeographies: extracted.preferredGeographies.length ? extracted.preferredGeographies : data.profile.preferredGeographies,
+        keywordsBoost: extracted.keywordsBoost.length ? extracted.keywordsBoost : data.profile.keywordsBoost,
         remotePreference: extracted.remotePreference,
-        idealCompanyStage: extracted.idealCompanyStage,
-        compensationNotes: '',
+        idealCompanyStage: extracted.idealCompanyStage.length ? extracted.idealCompanyStage : data.profile.idealCompanyStage,
       } as never)
-      toast({ title: 'Profile updated from CV', description: 'All match scores have been recalculated.', variant: 'success' })
       onApplied()
       onOpenChange(false)
     } catch (e) {
