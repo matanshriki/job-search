@@ -141,7 +141,7 @@ export function CompaniesPage() {
       for (const s of toAdd) {
         await addCompany({
           name: s.name,
-          website: s.careersUrl.replace(/\/careers.*$/, '').replace(/\/jobs.*$/, ''),
+          website: s.companyDomain || s.careersUrl.replace(/^https?:\/\//, '').split('/')[0],
           careerPageUrl: s.careersUrl,
           notes: s.whyRelevant,
           priority: s.priority === 'high' ? 'high' : 'medium',
@@ -435,16 +435,23 @@ export function CompaniesPage() {
                         <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
                           {s.whyRelevant}
                         </p>
-                        <a
-                          href={s.careersUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {s.careersUrl.replace(/^https?:\/\//, '').slice(0, 50)}
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
+                        <div className="mt-1 flex items-center gap-2">
+                          {s.atsProvider && s.atsProvider !== 'other' && (
+                            <Badge variant="secondary" className="text-xs capitalize py-0">
+                              {s.atsProvider}
+                            </Badge>
+                          )}
+                          <a
+                            href={s.careersUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {s.careersUrl.replace(/^https?:\/\//, '').slice(0, 50)}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
                       </div>
                     </div>
                   )

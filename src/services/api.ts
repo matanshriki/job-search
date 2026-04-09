@@ -291,6 +291,8 @@ export interface ApiGeneratedAsset {
 export interface ApiCompanySuggestion {
   name: string
   careersUrl: string
+  companyDomain: string
+  atsProvider: 'greenhouse' | 'lever' | 'ashby' | 'workable' | 'other'
   whyRelevant: string
   priority: 'high' | 'medium'
 }

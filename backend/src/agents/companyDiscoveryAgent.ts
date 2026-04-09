@@ -66,6 +66,10 @@ export async function runCompanyDiscoveryAgent(userId?: number): Promise<Company
       .map((s) => ({
         name: String(s.name).trim(),
         careersUrl: String(s.careersUrl).trim(),
+        companyDomain: String(s.companyDomain ?? '').trim(),
+        atsProvider: ['greenhouse', 'lever', 'ashby', 'workable'].includes(s.atsProvider)
+          ? s.atsProvider
+          : 'other',
         whyRelevant: String(s.whyRelevant ?? '').trim(),
         priority: s.priority === 'high' ? 'high' : 'medium',
       }))

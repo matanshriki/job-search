@@ -63,11 +63,15 @@ router.post('/', async (req, res) => {
     })
 
     if (careersUrl) {
-      const isGreenhouse = careersUrl.includes('greenhouse.io')
+      const sourceType = careersUrl.includes('greenhouse.io') ? 'greenhouse'
+        : careersUrl.includes('lever.co') ? 'lever'
+        : careersUrl.includes('ashbyhq.com') ? 'ashby'
+        : careersUrl.includes('workable.com') ? 'workable'
+        : 'generic_html'
       await prisma.companySource.create({
         data: {
           companyId: company.id,
-          sourceType: isGreenhouse ? 'greenhouse' : 'generic_html',
+          sourceType,
           sourceUrl: careersUrl,
           active: true,
         },
