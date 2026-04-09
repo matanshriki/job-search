@@ -1,30 +1,35 @@
 import { Router } from 'express'
 import prisma from '../db/client'
+import { requireAuth } from '../middleware/auth'
 import { runScoutAgentForCompany } from '../agents/scoutAgent'
 import { scanFromPastedHtml, jobDuplicateKey } from '../services/parsing/careerScanner'
 import { scoreJobAgainstProfile, fitLabel } from '../services/scoring/matchEngine'
 import { buildProfileFromDb } from '../utils/profileHelpers'
 
 const router = Router()
+router.use(requireAuth)
 
 // GET /api/companies
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
     const companies = await prisma.targetCompany.findMany({
+      where: { userId: req.userId },
       include: {
         sources: true,
         _count: { select: { jobPostings: { where: { isActive: true } } } },
       },
       orderBy: [{ priority: 'asc' }, { name: 'asc' }],
     })
+    const companyIds = companies.map((c) => c.id)
     const lastScans = await prisma.scanRun.findMany({
+      where: { companyId: { in: companyIds } },
       orderBy: { startedAt: 'desc' },
       distinct: ['companyId'],
     })
     const lastScanMap = new Map(lastScans.map((s) => [s.companyId, s]))
     const enriched = companies.map((c) => ({
       ...c,
-      lastScan: c.id ? lastScanMap.get(c.id) ?? null : null,
+      lastScan: lastScanMap.get(c.id) ?? null,
       jobsFoundCount: c._count.jobPostings,
     }))
     res.json({ ok: true, companies: enriched })
@@ -47,6 +52,7 @@ router.post('/', async (req, res) => {
 
     const company = await prisma.targetCompany.create({
       data: {
+        userId: req.userId,
         name,
         careersUrl: careersUrl ?? '',
         companyDomain: companyDomain ?? '',
@@ -78,8 +84,8 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const company = await prisma.targetCompany.findUnique({
-      where: { id },
+    const company = await prisma.targetCompany.findFirst({
+      where: { id, userId: req.userId },
       include: {
         sources: true,
         scanRuns: { orderBy: { startedAt: 'desc' }, take: 10 },
@@ -102,6 +108,9 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
+    const existing = await prisma.targetCompany.findFirst({ where: { id, userId: req.userId } })
+    if (!existing) return res.status(404).json({ ok: false, error: 'Not found' })
+
     const { name, careersUrl, companyDomain, priority, notes, active } = req.body as {
       name?: string; careersUrl?: string; companyDomain?: string; priority?: string; notes?: string; active?: boolean
     }
@@ -126,6 +135,8 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
+    const existing = await prisma.targetCompany.findFirst({ where: { id, userId: req.userId } })
+    if (!existing) return res.status(404).json({ ok: false, error: 'Not found' })
     await prisma.targetCompany.delete({ where: { id } })
     res.json({ ok: true })
   } catch (e) {
@@ -137,10 +148,12 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/scan', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const result = await runScoutAgentForCompany(id)
+    const existing = await prisma.targetCompany.findFirst({ where: { id, userId: req.userId } })
+    if (!existing) return res.status(404).json({ ok: false, error: 'Not found' })
+
+    const result = await runScoutAgentForCompany(id, req.userId)
     res.json({
       ok: result.success,
-      // Expose message as error so the frontend API client surfaces it
       ...(result.success ? {} : { error: result.message }),
       ...result,
     })
@@ -156,7 +169,7 @@ router.post('/:id/paste-html', async (req, res) => {
     const { html, baseUrl } = req.body as { html: string; baseUrl?: string }
     if (!html) return res.status(400).json({ ok: false, error: 'html is required' })
 
-    const company = await prisma.targetCompany.findUnique({ where: { id } })
+    const company = await prisma.targetCompany.findFirst({ where: { id, userId: req.userId } })
     if (!company) return res.status(404).json({ ok: false, error: 'Company not found' })
 
     const result = await scanFromPastedHtml({
@@ -165,16 +178,19 @@ router.post('/:id/paste-html', async (req, res) => {
       companyName: company.name,
     })
 
-    const profileRow = await prisma.profile.findFirst()
+    const profileRow = await prisma.profile.findFirst({ where: { userId: req.userId } })
     const profile = profileRow ? buildProfileFromDb(profileRow) : null
 
     let jobsCreated = 0
     if (result.ok && profile) {
       for (const draft of result.jobs) {
         const key = draft.normalizedKey || jobDuplicateKey(draft.company, draft.title, draft.location)
-        const existing = await prisma.jobPosting.findFirst({ where: { normalizedKey: key } })
+        const existing = await prisma.jobPosting.findFirst({ where: { normalizedKey: key, companyId: id } })
         if (existing) continue
-        const sr = scoreJobAgainstProfile({ title: draft.title, company: draft.company, location: draft.location, description: draft.description }, profile)
+        const sr = scoreJobAgainstProfile(
+          { title: draft.title, company: draft.company, location: draft.location, description: draft.description },
+          profile,
+        )
         const newJob = await prisma.jobPosting.create({
           data: {
             companyId: id,
@@ -218,6 +234,8 @@ router.post('/:id/paste-html', async (req, res) => {
 router.get('/:id/sources', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
+    const company = await prisma.targetCompany.findFirst({ where: { id, userId: req.userId } })
+    if (!company) return res.status(404).json({ ok: false, error: 'Not found' })
     const sources = await prisma.companySource.findMany({ where: { companyId: id } })
     res.json({ ok: true, sources })
   } catch (e) {
@@ -229,6 +247,9 @@ router.get('/:id/sources', async (req, res) => {
 router.post('/:id/sources', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
+    const company = await prisma.targetCompany.findFirst({ where: { id, userId: req.userId } })
+    if (!company) return res.status(404).json({ ok: false, error: 'Not found' })
+
     const { sourceType, sourceUrl, atsProvider } = req.body as {
       sourceType: string; sourceUrl: string; atsProvider?: string
     }

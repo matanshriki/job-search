@@ -28,9 +28,17 @@ async function main() {
   await prisma.appSettings.deleteMany()
   console.log('  ✓ Cleared existing data')
 
-  // Create a blank profile — the user fills this in via the Profile page
+  // Ensure the system user exists (id=1)
+  await prisma.user.upsert({
+    where: { email: 'system@localhost' },
+    update: {},
+    create: { id: 1, email: 'system@localhost', name: 'System' },
+  })
+
+  // Create a blank profile for the system user — real users get theirs on first login
   await prisma.profile.create({
     data: {
+      userId: 1,
       fullName: '',
       email: '',
       linkedinUrl: '',
@@ -53,6 +61,7 @@ async function main() {
   // Create default app settings
   await prisma.appSettings.create({
     data: {
+      userId: 1,
       minRelevantScore: 55,
       autoScanIntervalHours: 6,
       autoRunFitAnalysis: true,

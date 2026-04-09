@@ -80,10 +80,18 @@ interface LegacyAppData {
 
 async function main() {
   const args = process.argv.slice(2)
+
+  // --user-id <n> assigns imported data to a specific user (defaults to 1)
+  const userIdFlag = args.indexOf('--user-id')
+  const userId = userIdFlag !== -1 ? parseInt(args[userIdFlag + 1], 10) : 1
+  const fileArgs = args.filter((_, i) => i !== userIdFlag && i !== userIdFlag + 1)
+
+  console.log(`  Importing data for userId=${userId}`)
+
   let rawJson: string
 
-  if (args[0]) {
-    rawJson = readFileSync(args[0], 'utf-8')
+  if (fileArgs[0]) {
+    rawJson = readFileSync(fileArgs[0], 'utf-8')
   } else {
     // Try reading from stdin
     process.stdout.write('Reading from stdin...\n')
@@ -122,18 +130,18 @@ async function main() {
       summary: p.personalSummary ?? '',
     }
 
-    const existing = await prisma.profile.findFirst()
+    const existing = await prisma.profile.findFirst({ where: { userId } })
     if (existing) {
       await prisma.profile.update({ where: { id: existing.id }, data: profileData })
       console.log('  ✓ Profile updated')
     } else {
-      await prisma.profile.create({ data: profileData })
+      await prisma.profile.create({ data: { userId, ...profileData } })
       console.log('  ✓ Profile created')
     }
   }
 
   // Build profile for scoring
-  const profileRow = await prisma.profile.findFirst()
+  const profileRow = await prisma.profile.findFirst({ where: { userId } })
   const scoringProfile: SearchProfile = profileRow
     ? buildProfileForScoring(profileRow)
     : buildDefaultProfile()
@@ -144,7 +152,7 @@ async function main() {
     for (const c of data.companies) {
       // Check if already exists by name
       const existing = await prisma.targetCompany.findFirst({
-        where: { name: c.name },
+        where: { userId, name: c.name },
       })
       if (existing) {
         companyIdMap.set(c.id, existing.id)
@@ -152,6 +160,7 @@ async function main() {
       }
       const created = await prisma.targetCompany.create({
         data: {
+          userId,
           name: c.name,
           companyDomain: c.website ?? '',
           careersUrl: c.careerPageUrl ?? '',

@@ -1,16 +1,18 @@
 import { Router } from 'express'
 import prisma from '../db/client'
+import { requireAuth } from '../middleware/auth'
 import { profileToDbFields, buildProfileFromDb } from '../utils/profileHelpers'
 import { scoreJobAgainstProfile, fitLabel } from '../services/scoring/matchEngine'
 
 const router = Router()
+router.use(requireAuth)
 
 // GET /api/profile
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    let row = await prisma.profile.findFirst()
+    let row = await prisma.profile.findFirst({ where: { userId: req.userId } })
     if (!row) {
-      row = await prisma.profile.create({ data: {} })
+      row = await prisma.profile.create({ data: { userId: req.userId } })
     }
     res.json({ ok: true, profile: row })
   } catch (e) {
@@ -22,12 +24,10 @@ router.get('/', async (_req, res) => {
 router.put('/', async (req, res) => {
   try {
     const body = req.body as Record<string, unknown>
-    const existing = await prisma.profile.findFirst()
+    const existing = await prisma.profile.findFirst({ where: { userId: req.userId } })
 
-    // Accept either raw DB fields or the frontend SearchProfile shape
     let dbFields: Record<string, unknown>
     if ('targetTitles' in body || 'preferredGeographies' in body) {
-      // Frontend SearchProfile shape
       dbFields = profileToDbFields({
         targetTitles: (body.targetTitles as string[]) ?? [],
         excludedTitles: (body.excludedTitles as string[]) ?? [],
@@ -42,8 +42,6 @@ router.put('/', async (req, res) => {
         compensationNotes: (body.compensationNotes as string) ?? '',
         personalSummary: (body.personalSummary as string) ?? '',
       })
-
-      // Store personal info fields (allow empty string to clear)
       if ('fullName' in body) dbFields.fullName = body.fullName ?? ''
       if ('email' in body) dbFields.email = body.email ?? ''
       if ('linkedinUrl' in body) dbFields.linkedinUrl = body.linkedinUrl ?? ''
@@ -55,41 +53,38 @@ router.put('/', async (req, res) => {
     if (existing) {
       row = await prisma.profile.update({ where: { id: existing.id }, data: dbFields as never })
     } else {
-      row = await prisma.profile.create({ data: dbFields as never })
+      const createData = { userId: req.userId, ...dbFields }
+      row = await prisma.profile.create({ data: createData as never })
     }
 
-    // Rescore all jobs when profile changes — include company name for strategic fit scoring
+    // Rescore only this user's active jobs
     const profile = buildProfileFromDb(row)
+    const userCompanyIds = (
+      await prisma.targetCompany.findMany({ where: { userId: req.userId }, select: { id: true } })
+    ).map((c) => c.id)
+
     const jobs = await prisma.jobPosting.findMany({
-      where: { isActive: true },
+      where: { isActive: true, companyId: { in: userCompanyIds } },
       include: { company: { select: { name: true } } },
     })
     for (const job of jobs) {
-      const sr = scoreJobAgainstProfile({ title: job.title, company: job.company?.name ?? '', location: job.location, description: job.descriptionClean || job.descriptionRaw }, profile)
+      const sr = scoreJobAgainstProfile(
+        { title: job.title, company: job.company?.name ?? '', location: job.location, description: job.descriptionClean || job.descriptionRaw },
+        profile,
+      )
       await prisma.jobMatch.upsert({
         where: { jobPostingId: job.id },
         create: {
-          jobPostingId: job.id,
-          fitScore: sr.total,
-          fitLabel: fitLabel(sr.total),
-          scoreBreakdownJson: JSON.stringify(sr.breakdown),
-          matchingReasonsJson: JSON.stringify(sr.strengths),
-          concernsJson: JSON.stringify(sr.concerns),
-          redFlagsJson: JSON.stringify(sr.redFlags),
-          fitSummary: sr.fitSummary,
-          insightSnippet: sr.insightSnippet,
-          strengthsJson: JSON.stringify(sr.strengths),
+          jobPostingId: job.id, fitScore: sr.total, fitLabel: fitLabel(sr.total),
+          scoreBreakdownJson: JSON.stringify(sr.breakdown), matchingReasonsJson: JSON.stringify(sr.strengths),
+          concernsJson: JSON.stringify(sr.concerns), redFlagsJson: JSON.stringify(sr.redFlags),
+          fitSummary: sr.fitSummary, insightSnippet: sr.insightSnippet, strengthsJson: JSON.stringify(sr.strengths),
         },
         update: {
-          fitScore: sr.total,
-          fitLabel: fitLabel(sr.total),
-          scoreBreakdownJson: JSON.stringify(sr.breakdown),
-          matchingReasonsJson: JSON.stringify(sr.strengths),
-          concernsJson: JSON.stringify(sr.concerns),
-          redFlagsJson: JSON.stringify(sr.redFlags),
-          fitSummary: sr.fitSummary,
-          insightSnippet: sr.insightSnippet,
-          strengthsJson: JSON.stringify(sr.strengths),
+          fitScore: sr.total, fitLabel: fitLabel(sr.total),
+          scoreBreakdownJson: JSON.stringify(sr.breakdown), matchingReasonsJson: JSON.stringify(sr.strengths),
+          concernsJson: JSON.stringify(sr.concerns), redFlagsJson: JSON.stringify(sr.redFlags),
+          fitSummary: sr.fitSummary, insightSnippet: sr.insightSnippet, strengthsJson: JSON.stringify(sr.strengths),
           updatedAt: new Date(),
         },
       })

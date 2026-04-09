@@ -1,16 +1,26 @@
 import { Router } from 'express'
 import prisma from '../db/client'
+import { requireAuth } from '../middleware/auth'
 import { runScoutAgentForAllCompanies } from '../agents/scoutAgent'
 import { runCompanyDiscoveryAgent } from '../agents/companyDiscoveryAgent'
 import { isAiEnabled } from '../services/aiService'
 
 const router = Router()
+router.use(requireAuth)
+
+async function getUserCompanyIds(userId: number): Promise<number[]> {
+  const companies = await prisma.targetCompany.findMany({ where: { userId }, select: { id: true } })
+  return companies.map((c) => c.id)
+}
 
 // GET /api/agents/runs
 router.get('/runs', async (req, res) => {
   try {
     const { agentType, status, limit = '50' } = req.query as Record<string, string>
-    const where: Record<string, unknown> = {}
+    const userCompanyIds = await getUserCompanyIds(req.userId)
+    const where: Record<string, unknown> = {
+      jobPosting: { companyId: { in: userCompanyIds } },
+    }
     if (agentType) where.agentType = agentType
     if (status) where.status = status
     const runs = await prisma.agentRun.findMany({
@@ -29,8 +39,12 @@ router.get('/runs', async (req, res) => {
 router.get('/scan-runs', async (req, res) => {
   try {
     const { companyId, status, limit = '50' } = req.query as Record<string, string>
-    const where: Record<string, unknown> = {}
-    if (companyId) where.companyId = parseInt(companyId, 10)
+    const userCompanyIds = await getUserCompanyIds(req.userId)
+    const where: Record<string, unknown> = { companyId: { in: userCompanyIds } }
+    if (companyId) {
+      const requestedId = parseInt(companyId, 10)
+      if (userCompanyIds.includes(requestedId)) where.companyId = requestedId
+    }
     if (status) where.status = status
     const runs = await prisma.scanRun.findMany({
       where: where as never,
@@ -45,9 +59,9 @@ router.get('/scan-runs', async (req, res) => {
 })
 
 // POST /api/agents/scan-all
-router.post('/scan-all', async (_req, res) => {
+router.post('/scan-all', async (req, res) => {
   try {
-    const results = await runScoutAgentForAllCompanies()
+    const results = await runScoutAgentForAllCompanies(req.userId)
     res.json({ ok: true, results })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })
@@ -55,11 +69,9 @@ router.post('/scan-all', async (_req, res) => {
 })
 
 // POST /api/agents/discover-companies
-// Returns AI-suggested (or curated) company recommendations based on the user's profile.
-// Does NOT add companies — returns suggestions for the user to review first.
-router.post('/discover-companies', async (_req, res) => {
+router.post('/discover-companies', async (req, res) => {
   try {
-    const result = await runCompanyDiscoveryAgent()
+    const result = await runCompanyDiscoveryAgent(req.userId)
     res.json({ ok: true, ...result })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })
@@ -67,26 +79,22 @@ router.post('/discover-companies', async (_req, res) => {
 })
 
 // GET /api/agents/status
-router.get('/status', async (_req, res) => {
+router.get('/status', async (req, res) => {
   try {
+    const userCompanyIds = await getUserCompanyIds(req.userId)
+    const jobsWhere = { companyId: { in: userCompanyIds } }
     const [totalRuns, failedRuns, pendingRuns, recentRuns] = await Promise.all([
-      prisma.agentRun.count(),
-      prisma.agentRun.count({ where: { status: 'failed' } }),
-      prisma.agentRun.count({ where: { status: 'running' } }),
+      prisma.agentRun.count({ where: { jobPosting: jobsWhere } }),
+      prisma.agentRun.count({ where: { jobPosting: jobsWhere, status: 'failed' } }),
+      prisma.agentRun.count({ where: { jobPosting: jobsWhere, status: 'running' } }),
       prisma.agentRun.findMany({
+        where: { jobPosting: jobsWhere },
         orderBy: { startedAt: 'desc' },
         take: 10,
         include: { jobPosting: { select: { id: true, title: true } } },
       }),
     ])
-    res.json({
-      ok: true,
-      aiEnabled: isAiEnabled(),
-      totalRuns,
-      failedRuns,
-      pendingRuns,
-      recentRuns,
-    })
+    res.json({ ok: true, aiEnabled: isAiEnabled(), totalRuns, failedRuns, pendingRuns, recentRuns })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })
   }
@@ -96,7 +104,8 @@ router.get('/status', async (_req, res) => {
 router.get('/assets', async (req, res) => {
   try {
     const { assetType, limit = '50' } = req.query as Record<string, string>
-    const where: Record<string, unknown> = {}
+    const userCompanyIds = await getUserCompanyIds(req.userId)
+    const where: Record<string, unknown> = { jobPosting: { companyId: { in: userCompanyIds } } }
     if (assetType) where.assetType = assetType
     const assets = await prisma.generatedAsset.findMany({
       where: where as never,
@@ -111,10 +120,14 @@ router.get('/assets', async (req, res) => {
 })
 
 // GET /api/agents/settings
-router.get('/settings', async (_req, res) => {
+router.get('/settings', async (req, res) => {
   try {
-    let settings = await prisma.appSettings.findFirst()
-    if (!settings) settings = await prisma.appSettings.create({ data: {} })
+    let settings = await prisma.appSettings.findUnique({ where: { userId: req.userId } })
+    if (!settings) {
+      settings = await prisma.appSettings.create({
+        data: { userId: req.userId, minRelevantScore: 55, autoScanIntervalHours: 6, autoRunFitAnalysis: true, fitAnalysisThreshold: 55 },
+      })
+    }
     res.json({ ok: true, settings })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })
@@ -132,7 +145,6 @@ router.put('/settings', async (req, res) => {
       autoRunFitAnalysis?: boolean; fitAnalysisThreshold?: number
       jobsFeedJson?: string; savedJobViewsJson?: string
     }
-    let settings = await prisma.appSettings.findFirst()
     const data: Record<string, unknown> = {}
     if (minRelevantScore !== undefined) data.minRelevantScore = minRelevantScore
     if (autoScanIntervalHours !== undefined) data.autoScanIntervalHours = autoScanIntervalHours
@@ -141,11 +153,12 @@ router.put('/settings', async (req, res) => {
     if (jobsFeedJson !== undefined) data.jobsFeedJson = jobsFeedJson
     if (savedJobViewsJson !== undefined) data.savedJobViewsJson = savedJobViewsJson
 
-    if (settings) {
-      settings = await prisma.appSettings.update({ where: { id: settings.id }, data: data as never })
-    } else {
-      settings = await prisma.appSettings.create({ data: data as never })
-    }
+    const createData = { userId: req.userId, ...data }
+    const settings = await prisma.appSettings.upsert({
+      where: { userId: req.userId },
+      create: createData as never,
+      update: data as never,
+    })
     res.json({ ok: true, settings })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })

@@ -4,6 +4,12 @@
  */
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? 'http://localhost:3001'
+const TOKEN_KEY = 'job-search-auth-token'
+
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem(TOKEN_KEY)
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 async function request<T>(
   path: string,
@@ -11,9 +17,15 @@ async function request<T>(
 ): Promise<T> {
   const url = `${API_BASE}${path}`
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options?.headers },
     ...options,
   })
+  if (res.status === 401) {
+    // Token expired or invalid — clear it and let the app redirect to login
+    localStorage.removeItem(TOKEN_KEY)
+    window.dispatchEvent(new Event('auth:expired'))
+    throw new Error('Session expired. Please log in again.')
+  }
   const json = await res.json() as { ok: boolean; error?: string; message?: string } & T
   if (!res.ok || !json.ok) {
     // Some endpoints (e.g. scan) return failure details in `message`, not `error`

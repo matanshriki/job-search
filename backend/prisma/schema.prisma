@@ -7,8 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String   @default("")
+  avatarUrl String   @default("")
+  googleId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profiles    Profile[]
+  companies   TargetCompany[]
+  resumes     Resume[]
+  appSettings AppSettings[]
+
+  @@map("users")
+}
+
 model Profile {
   id                      Int      @id @default(autoincrement())
+  userId                  Int
   fullName                String   @default("")
   email                   String   @default("")
   linkedinUrl             String   @default("")
@@ -28,11 +46,14 @@ model Profile {
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("profile")
 }
 
 model Resume {
   id           Int      @id @default(autoincrement())
+  userId       Int
   title        String
   rawText      String   @default("")
   filePath     String   @default("")
@@ -40,22 +61,25 @@ model Resume {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   generatedAssets GeneratedAsset[]
 
   @@map("resumes")
 }
 
 model TargetCompany {
-  id           Int      @id @default(autoincrement())
-  name         String
-  companyDomain String  @default("")
-  careersUrl   String   @default("")
-  priority     String   @default("medium")
-  notes        String   @default("")
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  name          String
+  companyDomain String   @default("")
+  careersUrl    String   @default("")
+  priority      String   @default("medium")
+  notes         String   @default("")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   sources     CompanySource[]
   jobPostings JobPosting[]
   scanRuns    ScanRun[]
@@ -236,6 +260,7 @@ model ActivityLog {
 
 model AppSettings {
   id                    Int      @id @default(autoincrement())
+  userId                Int      @unique
   minRelevantScore      Int      @default(55)
   autoScanIntervalHours Int      @default(6)
   autoRunFitAnalysis    Boolean  @default(true)
@@ -244,6 +269,8 @@ model AppSettings {
   savedJobViewsJson     String   @default("[]")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("app_settings")
 }

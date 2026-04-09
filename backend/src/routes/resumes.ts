@@ -1,12 +1,17 @@
 import { Router } from 'express'
 import prisma from '../db/client'
+import { requireAuth } from '../middleware/auth'
 
 const router = Router()
+router.use(requireAuth)
 
 // GET /api/resumes
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const resumes = await prisma.resume.findMany({ orderBy: [{ isBaseResume: 'desc' }, { createdAt: 'desc' }] })
+    const resumes = await prisma.resume.findMany({
+      where: { userId: req.userId },
+      orderBy: [{ isBaseResume: 'desc' }, { createdAt: 'desc' }],
+    })
     res.json({ ok: true, resumes })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })
@@ -16,16 +21,17 @@ router.get('/', async (_req, res) => {
 // POST /api/resumes
 router.post('/', async (req, res) => {
   try {
-    const { title, rawText, isBaseResume } = req.body as { title: string; rawText?: string; isBaseResume?: boolean }
+    const { title, rawText, isBaseResume } = req.body as {
+      title: string; rawText?: string; isBaseResume?: boolean
+    }
     if (!title) return res.status(400).json({ ok: false, error: 'title is required' })
 
-    // If setting as base, unset others
     if (isBaseResume) {
-      await prisma.resume.updateMany({ data: { isBaseResume: false } })
+      await prisma.resume.updateMany({ where: { userId: req.userId }, data: { isBaseResume: false } })
     }
 
     const resume = await prisma.resume.create({
-      data: { title, rawText: rawText ?? '', isBaseResume: isBaseResume ?? false },
+      data: { userId: req.userId, title, rawText: rawText ?? '', isBaseResume: isBaseResume ?? false },
     })
     res.status(201).json({ ok: true, resume })
   } catch (e) {
@@ -37,7 +43,7 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const resume = await prisma.resume.findUnique({ where: { id } })
+    const resume = await prisma.resume.findFirst({ where: { id, userId: req.userId } })
     if (!resume) return res.status(404).json({ ok: false, error: 'Not found' })
     res.json({ ok: true, resume })
   } catch (e) {
@@ -49,10 +55,15 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const { title, rawText, isBaseResume } = req.body as { title?: string; rawText?: string; isBaseResume?: boolean }
+    const existing = await prisma.resume.findFirst({ where: { id, userId: req.userId } })
+    if (!existing) return res.status(404).json({ ok: false, error: 'Not found' })
+
+    const { title, rawText, isBaseResume } = req.body as {
+      title?: string; rawText?: string; isBaseResume?: boolean
+    }
 
     if (isBaseResume) {
-      await prisma.resume.updateMany({ where: { id: { not: id } }, data: { isBaseResume: false } })
+      await prisma.resume.updateMany({ where: { userId: req.userId, id: { not: id } }, data: { isBaseResume: false } })
     }
 
     const resume = await prisma.resume.update({
@@ -73,8 +84,9 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const resume = await prisma.resume.findUnique({ where: { id } })
-    if (resume?.isBaseResume) {
+    const resume = await prisma.resume.findFirst({ where: { id, userId: req.userId } })
+    if (!resume) return res.status(404).json({ ok: false, error: 'Not found' })
+    if (resume.isBaseResume) {
       return res.status(400).json({ ok: false, error: 'Cannot delete the base resume. Set another as base first.' })
     }
     await prisma.resume.delete({ where: { id } })

@@ -16,8 +16,8 @@ export interface CompanyDiscoveryResult {
   message: string
 }
 
-export async function runCompanyDiscoveryAgent(): Promise<CompanyDiscoveryResult> {
-  const profileRow = await prisma.profile.findFirst()
+export async function runCompanyDiscoveryAgent(userId?: number): Promise<CompanyDiscoveryResult> {
+  const profileRow = await prisma.profile.findFirst({ where: userId ? { userId } : undefined })
 
   if (!profileRow) {
     return {

@@ -2,20 +2,44 @@ import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Toaster } from '@/components/ui/toaster'
 import { AppStateProvider } from '@/context/app-state-compat'
+import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { ToastStateProvider } from '@/hooks/use-toast'
 import { CompaniesPage } from '@/pages/CompaniesPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { ImportExportPage } from '@/pages/ImportExportPage'
 import { JobDetailPage } from '@/pages/JobDetailPage'
 import { JobsFeedPage } from '@/pages/JobsFeedPage'
+import { LoginPage } from '@/pages/LoginPage'
 import { ManualIntakePage } from '@/pages/ManualIntakePage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { ResumesPage } from '@/pages/ResumesPage'
 import { AgentRunsPage } from '@/pages/AgentRunsPage'
 import { GeneratedAssetsPage } from '@/pages/GeneratedAssetsPage'
 import { SourceHealthPage } from '@/pages/SourceHealthPage'
+import { useEffect } from 'react'
 
 function AppRoutes() {
+  const { isAuthenticated, isLoading, logout } = useAuth()
+
+  // Listen for 401 events emitted by the API client when a token expires
+  useEffect(() => {
+    const handler = () => logout()
+    window.addEventListener('auth:expired', handler)
+    return () => window.removeEventListener('auth:expired', handler)
+  }, [logout])
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />
+  }
+
   return (
     <Routes>
       <Route element={<AppLayout />}>
@@ -48,25 +72,26 @@ function AppShell() {
 /**
  * GitHub Pages: uses HashRouter in prod so deep-links work.
  * Local dev: BrowserRouter with basename from Vite.
- * When running with the backend, the app is served at http://localhost:5173.
  */
 export default function App() {
   const isProd = import.meta.env.PROD
   return (
     <ToastStateProvider>
-      <AppStateProvider>
-        {isProd ? (
-          <HashRouter>
-            <AppShell />
-          </HashRouter>
-        ) : (
-          <BrowserRouter
-            basename={import.meta.env.BASE_URL.replace(/\/$/, '') || undefined}
-          >
-            <AppShell />
-          </BrowserRouter>
-        )}
-      </AppStateProvider>
+      <AuthProvider>
+        <AppStateProvider>
+          {isProd ? (
+            <HashRouter>
+              <AppShell />
+            </HashRouter>
+          ) : (
+            <BrowserRouter
+              basename={import.meta.env.BASE_URL.replace(/\/$/, '') || undefined}
+            >
+              <AppShell />
+            </BrowserRouter>
+          )}
+        </AppStateProvider>
+      </AuthProvider>
     </ToastStateProvider>
   )
 }

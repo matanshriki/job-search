@@ -2,6 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
+import passport from 'passport'
 import { startScheduler } from './services/scheduler'
 import profileRouter from './routes/profile'
 import companiesRouter from './routes/companies'
@@ -10,6 +11,7 @@ import resumesRouter from './routes/resumes'
 import dashboardRouter from './routes/dashboard'
 import agentsRouter from './routes/agents'
 import importExportRouter from './routes/importExport'
+import authRouter, { setupPassport } from './routes/auth'
 import prisma from './db/client'
 
 const app = express()
@@ -29,6 +31,8 @@ app.use(cors({
 }))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
+app.use(passport.initialize())
+setupPassport()
 
 // Health check
 app.get('/api/health', async (_req, res) => {
@@ -48,7 +52,10 @@ app.get('/api/health', async (_req, res) => {
   }
 })
 
-// API routes
+// Auth routes (no JWT required — handles OAuth flow)
+app.use('/auth', authRouter)
+
+// API routes (all require JWT via requireAuth middleware inside each router)
 app.use('/api/profile', profileRouter)
 app.use('/api/companies', companiesRouter)
 app.use('/api/jobs', jobsRouter)

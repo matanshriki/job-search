@@ -25,9 +25,9 @@ export interface ScoutAgentResult {
   warnings: string[]
 }
 
-export async function runScoutAgentForCompany(companyId: number): Promise<ScoutAgentResult> {
-  const company = await prisma.targetCompany.findUnique({
-    where: { id: companyId },
+export async function runScoutAgentForCompany(companyId: number, userId?: number): Promise<ScoutAgentResult> {
+  const company = await prisma.targetCompany.findFirst({
+    where: { id: companyId, ...(userId ? { userId } : {}) },
     include: { sources: { where: { active: true } } },
   })
 
@@ -60,8 +60,9 @@ export async function runScoutAgentForCompany(companyId: number): Promise<ScoutA
   })
 
   try {
-    // Load profile for scoring
-    const profileRow = await prisma.profile.findFirst()
+    // Load profile for scoring (scoped to the company's owner)
+    const ownerId = userId ?? company.userId
+    const profileRow = await prisma.profile.findFirst({ where: { userId: ownerId } })
     const profile = profileRow ? buildProfileFromDb(profileRow) : getDefaultProfile()
 
     // Run scanner
@@ -276,15 +277,15 @@ export async function runScoutAgentForCompany(companyId: number): Promise<ScoutA
   }
 }
 
-export async function runScoutAgentForAllCompanies(): Promise<ScoutAgentResult[]> {
+export async function runScoutAgentForAllCompanies(userId?: number): Promise<ScoutAgentResult[]> {
   const companies = await prisma.targetCompany.findMany({
-    where: { active: true, careersUrl: { not: '' } },
+    where: { active: true, careersUrl: { not: '' }, ...(userId ? { userId } : {}) },
   })
 
   const results: ScoutAgentResult[] = []
   for (const company of companies) {
     try {
-      const result = await runScoutAgentForCompany(company.id)
+      const result = await runScoutAgentForCompany(company.id, userId)
       results.push(result)
     } catch (e) {
       results.push({

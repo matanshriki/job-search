@@ -1,20 +1,33 @@
 import { Router } from 'express'
 import prisma from '../db/client'
+import { requireAuth } from '../middleware/auth'
 import { scoreJobAgainstProfile, fitLabel } from '../services/scoring/matchEngine'
 import { buildProfileFromDb } from '../utils/profileHelpers'
 import { jobDuplicateKey } from '../services/parsing/careerScanner'
 
 const router = Router()
+router.use(requireAuth)
 
 // GET /api/export — export all data as JSON
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
+    const userCompanyIds = (
+      await prisma.targetCompany.findMany({ where: { userId: req.userId }, select: { id: true } })
+    ).map((c) => c.id)
+
     const [profile, companies, jobs, scanRuns, resumes] = await Promise.all([
-      prisma.profile.findFirst(),
-      prisma.targetCompany.findMany({ include: { sources: true } }),
-      prisma.jobPosting.findMany({ include: { match: true, jobNotes: true, company: { select: { name: true } } } }),
-      prisma.scanRun.findMany({ orderBy: { startedAt: 'desc' }, take: 200 }),
-      prisma.resume.findMany(),
+      prisma.profile.findFirst({ where: { userId: req.userId } }),
+      prisma.targetCompany.findMany({ where: { userId: req.userId }, include: { sources: true } }),
+      prisma.jobPosting.findMany({
+        where: { companyId: { in: userCompanyIds } },
+        include: { match: true, jobNotes: true, company: { select: { name: true } } },
+      }),
+      prisma.scanRun.findMany({
+        where: { companyId: { in: userCompanyIds } },
+        orderBy: { startedAt: 'desc' },
+        take: 200,
+      }),
+      prisma.resume.findMany({ where: { userId: req.userId } }),
     ])
 
     // Shape as legacy-compatible format for backward compat
@@ -105,19 +118,25 @@ router.post('/', async (req, res) => {
     const importData = (data ?? body) as Record<string, unknown>
 
     if (clearExisting) {
-      // Clear everything except settings
-      await prisma.activityLog.deleteMany()
-      await prisma.notification.deleteMany()
-      await prisma.agentRun.deleteMany()
-      await prisma.generatedAsset.deleteMany()
-      await prisma.jobMatch.deleteMany()
-      await prisma.jobNote.deleteMany()
-      await prisma.jobPosting.deleteMany()
-      await prisma.scanRun.deleteMany()
-      await prisma.companySource.deleteMany()
-      await prisma.targetCompany.deleteMany()
-      await prisma.resume.deleteMany()
-      await prisma.profile.deleteMany()
+      // Clear only this user's data
+      const userCompanyIds = (
+        await prisma.targetCompany.findMany({ where: { userId: req.userId }, select: { id: true } })
+      ).map((c) => c.id)
+      await prisma.jobPosting.findMany({ where: { companyId: { in: userCompanyIds } } }).then(async (jobs) => {
+        const jobIds = jobs.map((j) => j.id)
+        await prisma.activityLog.deleteMany({ where: { jobPostingId: { in: jobIds } } })
+        await prisma.notification.deleteMany({ where: { jobPostingId: { in: jobIds } } })
+        await prisma.agentRun.deleteMany({ where: { jobPostingId: { in: jobIds } } })
+        await prisma.generatedAsset.deleteMany({ where: { jobPostingId: { in: jobIds } } })
+        await prisma.jobMatch.deleteMany({ where: { jobPostingId: { in: jobIds } } })
+        await prisma.jobNote.deleteMany({ where: { jobPostingId: { in: jobIds } } })
+        await prisma.jobPosting.deleteMany({ where: { id: { in: jobIds } } })
+      })
+      await prisma.scanRun.deleteMany({ where: { companyId: { in: userCompanyIds } } })
+      await prisma.companySource.deleteMany({ where: { companyId: { in: userCompanyIds } } })
+      await prisma.targetCompany.deleteMany({ where: { userId: req.userId } })
+      await prisma.resume.deleteMany({ where: { userId: req.userId } })
+      await prisma.profile.deleteMany({ where: { userId: req.userId } })
     }
 
     let stats = { profiles: 0, companies: 0, jobs: 0, resumes: 0, scanHistory: 0 }
@@ -142,9 +161,9 @@ router.post('/', async (req, res) => {
         email: (p.email as string) ?? '',
         linkedinUrl: (p.linkedinUrl as string) ?? '',
       }
-      const existing = await prisma.profile.findFirst()
+      const existing = await prisma.profile.findFirst({ where: { userId: req.userId } })
       if (existing) await prisma.profile.update({ where: { id: existing.id }, data: profileData })
-      else await prisma.profile.create({ data: profileData })
+      else await prisma.profile.create({ data: { userId: req.userId, ...profileData } })
       stats.profiles = 1
     }
 
@@ -153,7 +172,7 @@ router.post('/', async (req, res) => {
     if (Array.isArray(importData.companies)) {
       for (const c of importData.companies as Array<Record<string, unknown>>) {
         const existing = await prisma.targetCompany.findFirst({
-          where: { name: c.name as string },
+          where: { userId: req.userId, name: c.name as string },
         })
         if (existing) {
           companyIdMap.set(c.id as string, existing.id)
@@ -161,6 +180,7 @@ router.post('/', async (req, res) => {
         }
         const created = await prisma.targetCompany.create({
           data: {
+            userId: req.userId,
             name: c.name as string,
             companyDomain: (c.website as string) ?? '',
             careersUrl: (c.careerPageUrl as string) ?? '',
@@ -185,7 +205,7 @@ router.post('/', async (req, res) => {
     }
 
     // Build profile for scoring
-    const profileRow = await prisma.profile.findFirst()
+    const profileRow = await prisma.profile.findFirst({ where: { userId: req.userId } })
     const profile = profileRow ? buildProfileFromDb(profileRow) : null
 
     // Import jobs
@@ -251,6 +271,7 @@ router.post('/', async (req, res) => {
       for (const r of importData.resumes as Array<Record<string, unknown>>) {
         await prisma.resume.create({
           data: {
+            userId: req.userId,
             title: (r.title as string) ?? 'Imported Resume',
             rawText: (r.rawText as string) ?? '',
             isBaseResume: (r.isBaseResume as boolean) ?? false,
