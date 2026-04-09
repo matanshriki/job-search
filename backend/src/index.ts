@@ -48,6 +48,7 @@ app.get('/api/health', async (_req, res) => {
       model: aiEnabled ? (process.env.AI_MODEL || 'gpt-4o-mini') : null,
     })
   } catch (e) {
+    console.error('[health] DB check failed:', e)
     res.status(503).json({ ok: false, status: 'unhealthy', error: String(e) })
   }
 })
@@ -70,11 +71,15 @@ app.use('/api/*', (_req, res) => {
   res.status(404).json({ ok: false, error: 'API route not found' })
 })
 
+// Log env sanity at startup so Railway logs show the exact config
+console.log(`[startup] NODE_ENV=${process.env.NODE_ENV ?? '(unset)'}`)
+console.log(`[startup] DATABASE_URL=${process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/:([^:@]+)@/, ':***@') : '(not set)'}`)
+console.log(`[startup] PORT=${process.env.PORT ?? '(unset — defaulting to 3001)'}`)
+
 // Start server — bind to 0.0.0.0 so Railway/containers can expose the port
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Job Search Backend running at http://localhost:${PORT}`)
   console.log(`   Health: http://localhost:${PORT}/api/health`)
-  console.log(`   DB: ${process.env.DATABASE_URL ?? 'file:./data/job-search.db'}`)
   if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'mock') {
     console.log('\n   ⚠  AI mock mode — set OPENAI_API_KEY in backend/.env to enable real agents')
   } else {
