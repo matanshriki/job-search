@@ -33,9 +33,9 @@ export function extractGreenhouseBoardToken(url: string): string | null {
 }
 
 export function isLikelyGreenhousePage(html: string, pageUrl: string): boolean {
-  const blob = `${pageUrl} ${html.slice(0, 8000)}`.toLowerCase()
+  const blob = `${pageUrl} ${html}`.toLowerCase()
   return (
-    blob.includes('greenhouse') ||
+    blob.includes('greenhouse.io') ||
     blob.includes('boards.greenhouse.io') ||
     blob.includes('job-boards.greenhouse.io')
   )

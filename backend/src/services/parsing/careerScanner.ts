@@ -5,9 +5,11 @@
 
 import { extractGreenhouseBoardToken, fetchGreenhouseJobs, greenhouseJobToNormalized, isLikelyGreenhousePage } from './greenhouse'
 import { extractLeverToken, fetchLeverJobs, leverJobToNormalized, isLikelyLeverPage } from './lever'
+import { extractAshbyToken, fetchAshbyJobs, ashbyJobToNormalized, isLikelyAshbyPage } from './ashby'
+import { extractWorkableToken, fetchWorkableJobs, workableJobToNormalized, isLikelyWorkablePage } from './workable'
 import { parseGenericJobListHtml } from './genericHtml'
 
-export type ScanMethod = 'greenhouse_api' | 'lever_api' | 'ashby_api' | 'generic_html' | 'cors_blocked' | 'paste_html' | 'manual'
+export type ScanMethod = 'greenhouse_api' | 'lever_api' | 'ashby_api' | 'workable_api' | 'generic_html' | 'cors_blocked' | 'paste_html' | 'manual'
 
 export interface NormalizedJobDraft {
   title: string
@@ -154,10 +156,66 @@ export async function scanCompanyCareerPage(options: {
     warnings.push(lv.error)
   }
 
-  // 3. Fetch HTML (server-side, no CORS issue)
+  // 3. Try Ashby API (token in URL)
+  const ashbyTokenFromUrl = extractAshbyToken(careerPageUrl)
+  if (ashbyTokenFromUrl) {
+    const ab = await fetchAshbyJobs(ashbyTokenFromUrl)
+    if (ab.ok) {
+      const jobs: NormalizedJobDraft[] = ab.jobs.map((j) => {
+        const n = ashbyJobToNormalized(j, companyName)
+        return {
+          ...n,
+          sourceType: 'ashby',
+          sourceLabel: 'Ashby',
+          sourceUrl: n.sourceUrl || careerPageUrl,
+          normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
+        }
+      })
+      return {
+        ok: true,
+        method: 'ashby_api',
+        message: jobs.length > 0
+          ? `Loaded ${jobs.length} roles from Ashby public API.`
+          : 'Ashby board returned zero open roles.',
+        jobs,
+        warnings,
+      }
+    }
+    warnings.push(ab.error)
+  }
+
+  // 4. Try Workable API (token in URL)
+  const workableTokenFromUrl = extractWorkableToken(careerPageUrl)
+  if (workableTokenFromUrl) {
+    const wk = await fetchWorkableJobs(workableTokenFromUrl)
+    if (wk.ok) {
+      const jobs: NormalizedJobDraft[] = wk.jobs.map((j) => {
+        const n = workableJobToNormalized(j, companyName)
+        return {
+          ...n,
+          sourceType: 'workable',
+          sourceLabel: 'Workable',
+          sourceUrl: n.sourceUrl || careerPageUrl,
+          normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
+        }
+      })
+      return {
+        ok: true,
+        method: 'workable_api',
+        message: jobs.length > 0
+          ? `Loaded ${jobs.length} roles from Workable public API.`
+          : 'Workable board returned zero open roles.',
+        jobs,
+        warnings,
+      }
+    }
+    warnings.push(wk.error)
+  }
+
+  // 5. Fetch HTML (server-side, no CORS issue)
   let fetched = await fetchCareerPageHtml(careerPageUrl)
 
-  // 3a. If the configured URL failed and it looks like a boards.greenhouse.io URL
+  // 5a. If the configured URL failed and it looks like a boards.greenhouse.io URL
   //     (i.e. a wrong/guessed board token), fall back to the company's real domain.
   if (!fetched.ok && tokenFromUrl && companyDomain) {
     warnings.push(`Career page URL failed (${fetched.error}). Trying company domain as fallback.`)
@@ -182,7 +240,7 @@ export async function scanCompanyCareerPage(options: {
 
   const { html, finalUrl } = fetched
 
-  // 4. Check if fetched HTML is Greenhouse
+  // 5b. Check if fetched HTML is Greenhouse
   if (tokenFromUrl || isLikelyGreenhousePage(html, finalUrl)) {
     const embedded = extractGreenhouseBoardToken(html) ?? tokenFromUrl
     if (embedded) {
@@ -213,7 +271,7 @@ export async function scanCompanyCareerPage(options: {
     }
   }
 
-  // 5. Check if fetched HTML is Lever
+  // 6. Check if fetched HTML is Lever
   if (leverTokenFromUrl || isLikelyLeverPage(html, finalUrl)) {
     const embedded = extractLeverToken(html) ?? leverTokenFromUrl
     if (embedded) {
@@ -242,7 +300,69 @@ export async function scanCompanyCareerPage(options: {
     }
   }
 
-  // 6. Generic HTML parse (fallback)
+  // 7. Check if fetched HTML is Ashby
+  if (ashbyTokenFromUrl || isLikelyAshbyPage(html, finalUrl)) {
+    const embedded = extractAshbyToken(html) ?? ashbyTokenFromUrl
+    if (embedded) {
+      const ab = await fetchAshbyJobs(embedded)
+      if (ab.ok) {
+        const jobs: NormalizedJobDraft[] = ab.jobs.map((j) => {
+          const n = ashbyJobToNormalized(j, companyName)
+          return {
+            ...n,
+            sourceType: 'ashby',
+            sourceLabel: 'Ashby',
+            sourceUrl: n.sourceUrl || finalUrl,
+            normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
+          }
+        })
+        return {
+          ok: true,
+          method: 'ashby_api',
+          message: jobs.length > 0
+            ? `Detected Ashby; loaded ${jobs.length} roles.`
+            : 'Ashby board detected but returned zero open roles.',
+          jobs,
+          warnings,
+        }
+      } else {
+        warnings.push(ab.error)
+      }
+    }
+  }
+
+  // 8. Check if fetched HTML is Workable
+  if (workableTokenFromUrl || isLikelyWorkablePage(html, finalUrl)) {
+    const embedded = extractWorkableToken(html) ?? workableTokenFromUrl
+    if (embedded) {
+      const wk = await fetchWorkableJobs(embedded)
+      if (wk.ok) {
+        const jobs: NormalizedJobDraft[] = wk.jobs.map((j) => {
+          const n = workableJobToNormalized(j, companyName)
+          return {
+            ...n,
+            sourceType: 'workable',
+            sourceLabel: 'Workable',
+            sourceUrl: n.sourceUrl || finalUrl,
+            normalizedKey: jobDuplicateKey(companyName, n.title, n.location || 'Unspecified'),
+          }
+        })
+        return {
+          ok: true,
+          method: 'workable_api',
+          message: jobs.length > 0
+            ? `Detected Workable; loaded ${jobs.length} roles.`
+            : 'Workable board detected but returned zero open roles.',
+          jobs,
+          warnings,
+        }
+      } else {
+        warnings.push(wk.error)
+      }
+    }
+  }
+
+  // 9. Generic HTML parse (fallback)
   const generic = parseGenericJobListHtml(html, finalUrl)
   warnings.push(...generic.warnings)
 

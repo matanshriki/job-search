@@ -32,7 +32,7 @@ export function extractLeverToken(url: string): string | null {
 }
 
 export function isLikelyLeverPage(html: string, pageUrl: string): boolean {
-  const blob = `${pageUrl} ${html.slice(0, 8000)}`.toLowerCase()
+  const blob = `${pageUrl} ${html}`.toLowerCase()
   return blob.includes('lever.co') || blob.includes('jobs.lever')
 }
 
