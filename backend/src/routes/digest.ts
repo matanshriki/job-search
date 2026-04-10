@@ -24,11 +24,11 @@ router.post('/send', async (req, res) => {
     if (!user) return res.status(404).json({ ok: false, error: 'User not found' })
 
     const profileRow = await prisma.profile.findFirst({ where: { userId: req.userId } })
-    const recipientEmail = req.body?.email || profileRow?.email || user.email
+    const recipientEmail = req.body?.email || user.email || profileRow?.email || ''
     const recipientName = profileRow?.fullName?.split(' ')[0] || user.name?.split(' ')[0] || 'there'
 
     if (!recipientEmail) {
-      return res.status(400).json({ ok: false, error: 'No email address found. Add one to your profile.' })
+      return res.status(400).json({ ok: false, error: 'No email address on your account.' })
     }
 
     const digest = await generateWeeklyDigest(req.userId)

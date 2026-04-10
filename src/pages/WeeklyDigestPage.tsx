@@ -164,8 +164,8 @@ function EmailPanel({ emailEnabled, onSend, sending }: {
         {emailEnabled ? (
           <>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              SMTP is configured. Enter an address below or leave blank to use your profile email.
-              Digests also send automatically <strong className="text-foreground/70">every Monday at 8am</strong>.
+              SMTP is configured. Leave the field blank to send to your Google sign-in email, or enter another address to test.
+              Scheduled digests go to your sign-in email <strong className="text-foreground/70">every Monday at 8am</strong>.
             </p>
             <div className="flex gap-2">
               <Input
@@ -183,14 +183,13 @@ function EmailPanel({ emailEnabled, onSend, sending }: {
         ) : (
           <>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Email is not configured yet. Add these to <code className="bg-muted px-1 rounded text-[11px]">backend/.env</code> to enable weekly emails:
+              Email is not configured yet. Add these to <code className="bg-muted px-1 rounded text-[11px]">backend/.env</code> (or Railway variables). Digests are sent to each user’s Google sign-in email.
             </p>
             <div className="rounded-md bg-muted/30 border border-border/40 p-3 font-mono text-[11px] text-muted-foreground leading-relaxed space-y-0.5">
               <p>SMTP_HOST=smtp.gmail.com</p>
               <p>SMTP_PORT=587</p>
-              <p>SMTP_USER=you@gmail.com</p>
+              <p>SMTP_USER=your-sending@gmail.com</p>
               <p className="text-amber-400/80">SMTP_PASS=your-app-password</p>
-              <p>DIGEST_TO=you@gmail.com</p>
             </div>
             <p className="text-[11px] text-muted-foreground/60">
               Gmail: go to myaccount.google.com → Security → 2-Step Verification → App Passwords

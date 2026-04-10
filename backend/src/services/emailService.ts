@@ -1,16 +1,19 @@
 /**
  * Email Service — nodemailer wrapper.
  *
- * Configure via environment variables (add to backend/.env):
+ * Configure via environment variables (Railway / backend/.env):
  *
  *   SMTP_HOST=smtp.gmail.com
  *   SMTP_PORT=587
- *   SMTP_USER=you@gmail.com
- *   SMTP_PASS=your-gmail-app-password   # Gmail: myaccount.google.com → Security → App Passwords
- *   SMTP_FROM=you@gmail.com             # defaults to SMTP_USER
- *   DIGEST_TO=you@gmail.com            # who receives the weekly digest
+ *   SMTP_USER=your-sending-address@gmail.com    # mailbox used to *send* mail
+ *   SMTP_PASS=your-gmail-app-password             # Gmail → Security → App Passwords
+ *   SMTP_FROM=your-sending-address@gmail.com      # optional; defaults to SMTP_USER
  *
- * If SMTP_HOST is not set, email sending is silently skipped and a warning is logged.
+ * Weekly digests go to each user’s Google sign-in email (`User.email`), with a fallback
+ * to `Profile.email` if the account email is missing. You do not set a single “digest to”
+ * address — the app sends one message per user.
+ *
+ * If SMTP_HOST is not set, email sending is skipped.
  */
 
 import type { WeeklyDigestData } from './weeklyDigest'
@@ -20,10 +23,9 @@ const SMTP_PORT = parseInt(process.env.SMTP_PORT ?? '587', 10)
 const SMTP_USER = process.env.SMTP_USER
 const SMTP_PASS = process.env.SMTP_PASS
 const SMTP_FROM = process.env.SMTP_FROM ?? SMTP_USER
-const DIGEST_TO = process.env.DIGEST_TO ?? SMTP_USER
 
 export function isEmailEnabled(): boolean {
-  return !!(SMTP_HOST && SMTP_USER && SMTP_PASS && DIGEST_TO)
+  return !!(SMTP_HOST && SMTP_USER && SMTP_PASS)
 }
 
 /** Lazy-load nodemailer (pulls in TLS/native code) only when actually sending mail. */
@@ -211,7 +213,7 @@ export async function sendWeeklyDigestEmail(
   if (!isEmailEnabled()) {
     return {
       sent: false,
-      message: 'Email not configured. Add SMTP_HOST, SMTP_USER, SMTP_PASS, DIGEST_TO to backend/.env to enable.',
+      message: 'Email not configured. Add SMTP_HOST, SMTP_USER, and SMTP_PASS to backend/.env to enable.',
     }
   }
 

@@ -86,7 +86,8 @@ export function startScheduler() {
       for (const user of users) {
         try {
           const profile = await prisma.profile.findFirst({ where: { userId: user.id } })
-          const recipientEmail = profile?.email || user.email
+          // Prefer OAuth sign-in email; fall back to profile if ever missing
+          const recipientEmail = user.email || profile?.email || ''
           const recipientName = profile?.fullName?.split(' ')[0] || user.name?.split(' ')[0] || 'there'
           if (!recipientEmail) continue
           const digest = await generateWeeklyDigest(user.id)
