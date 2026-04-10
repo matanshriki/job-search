@@ -13,17 +13,24 @@
  * to `Profile.email` if the account email is missing. You do not set a single “digest to”
  * address — the app sends one message per user.
  *
- * If SMTP_HOST is not set, email sending is skipped.
+ * Prefer Resend on Railway (SMTP port 587 is often blocked):
+ *   RESEND_API_KEY=re_...
+ *   RESEND_FROM="Job Search <onboarding@resend.dev>"
  *
- * Optional tuning (defaults are tuned for Railway / slow SMTP):
- *   SMTP_CONNECTION_TIMEOUT_MS  (default 12000)
- *   SMTP_SOCKET_TIMEOUT_MS      (default 25000)
- *   SMTP_IPV4_ONLY=false        (default: force IPv4 — fixes ENETUNREACH to Gmail on hosts without IPv6)
+ * Optional SMTP tuning:
+ *   SMTP_CONNECTION_TIMEOUT_MS  (default 20000)
+ *   SMTP_SOCKET_TIMEOUT_MS      (default 35000)
+ *   SMTP_IPV4_ONLY=false
+ *   SMTP_USE_GMAIL_PRESET=true  (use nodemailer’s gmail preset when host is gmail)
  */
 
 import dns from 'node:dns'
 
 import type { WeeklyDigestData } from './weeklyDigest'
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY
+/** Default Resend sandbox sender; production: verify a domain at resend.com and set RESEND_FROM. */
+const RESEND_FROM = process.env.RESEND_FROM ?? 'Job Search Copilot <onboarding@resend.dev>'
 
 const SMTP_HOST = process.env.SMTP_HOST
 const SMTP_PORT = parseInt(process.env.SMTP_PORT ?? '587', 10)
@@ -36,16 +43,44 @@ const SMTP_FROM = process.env.SMTP_FROM ?? SMTP_USER
 const SMTP_IPV4_ONLY = process.env.SMTP_IPV4_ONLY !== 'false'
 
 export function isEmailEnabled(): boolean {
-  return !!(SMTP_HOST && SMTP_USER && SMTP_PASS)
+  return !!RESEND_API_KEY || !!(SMTP_HOST && SMTP_USER && SMTP_PASS)
+}
+
+/** For UI: Resend is tried first when both are set. */
+export function getEmailDeliveryMode(): 'resend' | 'smtp' | 'off' {
+  if (RESEND_API_KEY) return 'resend'
+  if (SMTP_HOST && SMTP_USER && SMTP_PASS) return 'smtp'
+  return 'off'
 }
 
 /** Nodemailer defaults can wait many minutes on blocked SMTP ports — keep UX predictable. */
-const SMTP_CONNECTION_MS = parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS ?? '12000', 10)
-const SMTP_SOCKET_MS = parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS ?? '25000', 10)
+const SMTP_CONNECTION_MS = parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS ?? '20000', 10)
+const SMTP_SOCKET_MS = parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS ?? '35000', 10)
+
+const ipv4Lookup =
+  SMTP_IPV4_ONLY
+    ? {
+        lookup: (hostname: string, _options: object, callback: (err: Error | null, address: string, family?: number) => void) => {
+          dns.lookup(hostname, { family: 4 }, callback)
+        },
+      }
+    : {}
 
 /** Lazy-load nodemailer (pulls in TLS/native code) only when actually sending mail. */
 async function createTransport() {
   const { default: nodemailer } = await import('nodemailer')
+  const useGmailPreset =
+    (SMTP_HOST?.includes('gmail') ?? false) || process.env.SMTP_USE_GMAIL_PRESET === 'true'
+  if (useGmailPreset && SMTP_USER && SMTP_PASS) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+      connectionTimeout: SMTP_CONNECTION_MS,
+      greetingTimeout: SMTP_CONNECTION_MS,
+      socketTimeout: SMTP_SOCKET_MS,
+      ...ipv4Lookup,
+    })
+  }
   return nodemailer.createTransport({
     host: SMTP_HOST,
     port: SMTP_PORT,
@@ -54,13 +89,7 @@ async function createTransport() {
     connectionTimeout: SMTP_CONNECTION_MS,
     greetingTimeout: SMTP_CONNECTION_MS,
     socketTimeout: SMTP_SOCKET_MS,
-    ...(SMTP_IPV4_ONLY
-      ? {
-          lookup: (hostname: string, _options: object, callback: (err: Error | null, address: string, family?: number) => void) => {
-            dns.lookup(hostname, { family: 4 }, callback)
-          },
-        }
-      : {}),
+    ...ipv4Lookup,
   })
 }
 
@@ -244,6 +273,47 @@ function buildWeeklyDigestHtml(data: WeeklyDigestData, recipientName: string): s
 </html>`
 }
 
+// ─── Resend (HTTPS :443 — works where SMTP is blocked) ────────────────────────
+
+async function sendDigestViaResend(
+  html: string,
+  subject: string,
+  to: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const key = RESEND_API_KEY
+  if (!key) return { ok: false, error: 'RESEND_API_KEY missing' }
+
+  const ac = new AbortController()
+  const timer = setTimeout(() => ac.abort(), 25_000)
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: RESEND_FROM,
+        to: [to],
+        subject,
+        html,
+      }),
+      signal: ac.signal,
+    })
+    const body = (await res.json().catch(() => ({}))) as { message?: string; name?: string }
+    if (!res.ok) {
+      const detail = [body.message, body.name].filter(Boolean).join(' — ')
+      return { ok: false, error: detail || `${res.status} ${res.statusText}` }
+    }
+    return { ok: true }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, error: msg }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function sendWeeklyDigestEmail(
@@ -254,20 +324,33 @@ export async function sendWeeklyDigestEmail(
   if (!isEmailEnabled()) {
     return {
       sent: false,
-      message: 'Email not configured. Add SMTP_HOST, SMTP_USER, and SMTP_PASS to backend/.env to enable.',
+      message:
+        'Email not configured. Set RESEND_API_KEY (recommended on Railway) or SMTP_HOST, SMTP_USER, and SMTP_PASS.',
+    }
+  }
+
+  const html = buildWeeklyDigestHtml(data, recipientName)
+  const subject = `Your weekly job search summary — ${data.period.label}`
+
+  if (RESEND_API_KEY) {
+    const r = await sendDigestViaResend(html, subject, recipientEmail)
+    if (r.ok) {
+      return { sent: true, message: `Digest sent to ${recipientEmail} (via Resend)` }
+    }
+    return {
+      sent: false,
+      message: `${r.error}. Tip: with onboarding@resend.dev you can only send to your Resend-account email until you verify a domain.`,
     }
   }
 
   const transporter = await createTransport()
-  const html = buildWeeklyDigestHtml(data, recipientName)
-
   const sendMs = Math.min(60000, SMTP_SOCKET_MS + 15000)
   try {
     await withTimeout(
       transporter.sendMail({
         from: `"Job Search Copilot" <${SMTP_FROM}>`,
         to: recipientEmail,
-        subject: `Your weekly job search summary — ${data.period.label}`,
+        subject,
         html,
       }),
       sendMs,
@@ -275,7 +358,7 @@ export async function sendWeeklyDigestEmail(
     )
   } catch (e) {
     const hint =
-      ' Check SMTP_HOST/SMTP_PORT (587 for Gmail), app password, and that your host allows outbound SMTP (some clouds block port 587).'
+      ' Railway often blocks SMTP. Add RESEND_API_KEY (resend.com, free tier) — uses HTTPS instead of port 587 — or try from a host that allows outbound SMTP.'
     return {
       sent: false,
       message: `${e instanceof Error ? e.message : String(e)}.${hint}`,

@@ -259,7 +259,10 @@ export const dataApi = {
 // ─── Digest ───────────────────────────────────────────────────────────────────
 
 export const digestApi = {
-  get: () => get<{ digest: ApiWeeklyDigest; emailEnabled: boolean }>('/api/digest'),
+  get: () =>
+    get<{ digest: ApiWeeklyDigest; emailEnabled: boolean; emailDelivery: 'resend' | 'smtp' | 'off' }>(
+      '/api/digest',
+    ),
   /** Use `{}` when no override so POST always has a JSON body (some hosts/proxies mishandle empty bodies). */
   send: (email?: string) =>
     post<{ sent: boolean; message: string; digest: ApiWeeklyDigest }>(

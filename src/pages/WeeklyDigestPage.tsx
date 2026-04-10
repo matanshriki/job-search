@@ -149,16 +149,23 @@ type SendBanner = { kind: 'success' | 'error'; message: string } | null
 
 function EmailPanel({
   emailEnabled,
+  emailDelivery,
   onSend,
   sending,
   sendBanner,
 }: {
   emailEnabled: boolean
+  emailDelivery: 'resend' | 'smtp' | 'off'
   onSend: (email?: string) => void
   sending: boolean
   sendBanner: SendBanner
 }) {
   const [customEmail, setCustomEmail] = useState('')
+
+  const deliveryNote =
+    emailDelivery === 'resend'
+      ? 'Email is sent via Resend (HTTPS). Many hosts block SMTP port 587 — Resend avoids that.'
+      : 'Email is sent via SMTP from your configured mailbox.'
 
   return (
     <Card className="border-border/60 bg-card/40">
@@ -172,7 +179,7 @@ function EmailPanel({
         {emailEnabled ? (
           <>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              SMTP is configured. Leave the field blank to send to your Google sign-in email, or enter another address to test.
+              {deliveryNote} Leave the field blank to send to your Google sign-in email, or enter another address to test.
               Scheduled digests go to your sign-in email <strong className="text-foreground/70">every Monday at 8am</strong>.
             </p>
             <div className="flex gap-2">
@@ -210,7 +217,14 @@ function EmailPanel({
         ) : (
           <>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              The server is not configured to send email yet. Add these to Railway (or <code className="bg-muted px-1 rounded text-[11px]">backend/.env</code>). After redeploy, refresh this page — the Send button will appear here.
+              <strong className="text-foreground/90">Recommended on Railway:</strong> use Resend (HTTPS only — no blocked SMTP port). Sign up at resend.com, create an API key, then set:
+            </p>
+            <div className="rounded-md bg-muted/30 border border-border/40 p-3 font-mono text-[11px] text-muted-foreground leading-relaxed space-y-0.5">
+              <p>RESEND_API_KEY=re_...</p>
+              <p>RESEND_FROM=&quot;Job Search &lt;onboarding@resend.dev&gt;&quot;</p>
+            </div>
+            <p className="text-[11px] text-muted-foreground/80">
+              Or use Gmail SMTP locally / on a host that allows outbound port 587:
             </p>
             <div className="rounded-md bg-muted/30 border border-border/40 p-3 font-mono text-[11px] text-muted-foreground leading-relaxed space-y-0.5">
               <p>SMTP_HOST=smtp.gmail.com</p>
@@ -218,11 +232,8 @@ function EmailPanel({
               <p>SMTP_USER=your-sending@gmail.com</p>
               <p className="text-amber-400/80">SMTP_PASS=your-app-password</p>
             </div>
-            <p className="text-[11px] text-muted-foreground/60">
-              Gmail: Security → 2-Step Verification → App Passwords. Digests use each user’s Google sign-in email.
-            </p>
             <div className="rounded-md border border-dashed border-border/60 px-3 py-2 text-center text-[11px] text-muted-foreground">
-              Send is unavailable until SMTP_* variables are set on the backend.
+              After setting variables, redeploy and refresh — Send appears here.
             </div>
           </>
         )}
@@ -237,6 +248,7 @@ export function WeeklyDigestPage() {
   const { toast } = useToast()
   const [digest, setDigest] = useState<ApiWeeklyDigest | null>(null)
   const [emailEnabled, setEmailEnabled] = useState(false)
+  const [emailDelivery, setEmailDelivery] = useState<'resend' | 'smtp' | 'off'>('off')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [sendBanner, setSendBanner] = useState<SendBanner>(null)
@@ -247,6 +259,7 @@ export function WeeklyDigestPage() {
       const data = await digestApi.get()
       setDigest(data.digest)
       setEmailEnabled(data.emailEnabled)
+      setEmailDelivery(data.emailDelivery ?? 'off')
     } catch {
       toast({ title: 'Failed to load digest', variant: 'destructive' })
     } finally {
@@ -408,7 +421,13 @@ export function WeeklyDigestPage() {
             </CardContent>
           </Card>
 
-          <EmailPanel emailEnabled={emailEnabled} onSend={handleSend} sending={sending} sendBanner={sendBanner} />
+          <EmailPanel
+            emailEnabled={emailEnabled}
+            emailDelivery={emailDelivery}
+            onSend={handleSend}
+            sending={sending}
+            sendBanner={sendBanner}
+          />
         </div>
       </div>
     </div>

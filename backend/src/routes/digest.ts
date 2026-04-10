@@ -2,7 +2,7 @@ import { Router } from 'express'
 import prisma from '../db/client'
 import { requireAuth } from '../middleware/auth'
 import { generateWeeklyDigest } from '../services/weeklyDigest'
-import { sendWeeklyDigestEmail, isEmailEnabled } from '../services/emailService'
+import { sendWeeklyDigestEmail, isEmailEnabled, getEmailDeliveryMode } from '../services/emailService'
 
 const router = Router()
 router.use(requireAuth)
@@ -11,7 +11,7 @@ router.use(requireAuth)
 router.get('/', async (req, res) => {
   try {
     const digest = await generateWeeklyDigest(req.userId)
-    res.json({ ok: true, digest, emailEnabled: isEmailEnabled() })
+    res.json({ ok: true, digest, emailEnabled: isEmailEnabled(), emailDelivery: getEmailDeliveryMode() })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })
   }
