@@ -4,7 +4,6 @@ import { runScoutAgentForAllCompanies } from '../agents/scoutAgent'
 import { runFitAnalystAgent } from '../agents/fitAnalystAgent'
 import { runJobBoardCrawlerForAllUsers } from '../agents/jobBoardCrawlerAgent'
 import { generateWeeklyDigest } from './weeklyDigest'
-import { sendWeeklyDigestEmail, isEmailEnabled } from './emailService'
 
 const SCHEDULER_ENABLED = process.env.SCHEDULER_ENABLED !== 'false'
 const SCAN_INTERVAL_HOURS = parseInt(process.env.SCAN_INTERVAL_HOURS ?? '6', 10)
@@ -77,8 +76,9 @@ export function startScheduler() {
     }
   })
 
-  // Weekly digest email — every Monday at 8am
+  // Weekly digest email — every Monday at 8am (lazy-load email module so nodemailer is not in startup path)
   cron.schedule('0 8 * * 1', async () => {
+    const { isEmailEnabled, sendWeeklyDigestEmail } = await import('./emailService')
     if (!isEmailEnabled()) return
     console.log('[scheduler] Sending weekly digest emails...')
     try {

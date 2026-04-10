@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Railway / Nixpacks Linux + local dev: avoids wrong engine → native crashes (malloc/glibc).
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

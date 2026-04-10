@@ -1,0 +1,3 @@
+# Pin Node 20 LTS — reduces glibc/native edge cases vs bleeding-edge Node on Railway.
+[variables]
+NIXPACKS_NODE_VERSION = "20"

@@ -13,7 +13,6 @@
  * If SMTP_HOST is not set, email sending is silently skipped and a warning is logged.
  */
 
-import nodemailer from 'nodemailer'
 import type { WeeklyDigestData } from './weeklyDigest'
 
 const SMTP_HOST = process.env.SMTP_HOST
@@ -27,7 +26,9 @@ export function isEmailEnabled(): boolean {
   return !!(SMTP_HOST && SMTP_USER && SMTP_PASS && DIGEST_TO)
 }
 
-function createTransport() {
+/** Lazy-load nodemailer (pulls in TLS/native code) only when actually sending mail. */
+async function createTransport() {
+  const { default: nodemailer } = await import('nodemailer')
   return nodemailer.createTransport({
     host: SMTP_HOST,
     port: SMTP_PORT,
@@ -214,7 +215,7 @@ export async function sendWeeklyDigestEmail(
     }
   }
 
-  const transporter = createTransport()
+  const transporter = await createTransport()
   const html = buildWeeklyDigestHtml(data, recipientName)
 
   await transporter.sendMail({

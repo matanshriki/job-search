@@ -1,3 +1,5 @@
+# If the app crashes with malloc/glibc errors after deploy, ensure Node 20 (nixpacks.toml)
+# and that Prisma binaryTargets match the container OpenSSL (see prisma/schema.prisma).
 [build]
 builder = "nixpacks"
 buildCommand = "npm install && npx prisma generate && npm run build"
