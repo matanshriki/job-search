@@ -231,6 +231,13 @@ export const dataApi = {
     post<{ ok: boolean; imported: Record<string, number> }>('/api/import', { data, clearExisting }),
 }
 
+// ─── Digest ───────────────────────────────────────────────────────────────────
+
+export const digestApi = {
+  get: () => get<{ digest: ApiWeeklyDigest; emailEnabled: boolean }>('/api/digest'),
+  send: (email?: string) => post<{ sent: boolean; message: string; digest: ApiWeeklyDigest }>('/api/digest/send', email ? { email } : undefined),
+}
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 
 export const healthApi = {
@@ -560,6 +567,36 @@ export interface ApiJobsFilter {
   hideOutsideProfileGeos?: string
   page?: string
   limit?: string
+}
+
+export interface ApiDigestJob {
+  id: number
+  title: string
+  company: string
+  location: string
+  fitScore: number
+  fitLabel: string
+  status: string
+  jobUrl: string
+  discoveredAt: string
+}
+
+export interface ApiWeeklyDigest {
+  period: { from: string; to: string; label: string }
+  stats: {
+    jobsFound: number
+    highMatchJobs: number
+    appliedCount: number
+    interviewingCount: number
+    queueItemsCreated: number
+    fitAnalysesRun: number
+    boardCrawlsRun: number
+    companiesScanned: number
+  }
+  topMatches: ApiDigestJob[]
+  appliedThisWeek: ApiDigestJob[]
+  pipelineSnapshot: Array<{ status: string; count: number }>
+  dashboardUrl: string
 }
 
 export interface ApiCreateJobInput {

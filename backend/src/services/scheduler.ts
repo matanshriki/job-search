@@ -3,6 +3,8 @@ import prisma from '../db/client'
 import { runScoutAgentForAllCompanies } from '../agents/scoutAgent'
 import { runFitAnalystAgent } from '../agents/fitAnalystAgent'
 import { runJobBoardCrawlerForAllUsers } from '../agents/jobBoardCrawlerAgent'
+import { generateWeeklyDigest } from './weeklyDigest'
+import { sendWeeklyDigestEmail, isEmailEnabled } from './emailService'
 
 const SCHEDULER_ENABLED = process.env.SCHEDULER_ENABLED !== 'false'
 const SCAN_INTERVAL_HOURS = parseInt(process.env.SCAN_INTERVAL_HOURS ?? '6', 10)
@@ -72,6 +74,30 @@ export function startScheduler() {
       }
     } catch (e) {
       console.error('[scheduler] Fit analysis queue failed:', e)
+    }
+  })
+
+  // Weekly digest email — every Monday at 8am
+  cron.schedule('0 8 * * 1', async () => {
+    if (!isEmailEnabled()) return
+    console.log('[scheduler] Sending weekly digest emails...')
+    try {
+      const users = await prisma.user.findMany({ select: { id: true, email: true, name: true } })
+      for (const user of users) {
+        try {
+          const profile = await prisma.profile.findFirst({ where: { userId: user.id } })
+          const recipientEmail = profile?.email || user.email
+          const recipientName = profile?.fullName?.split(' ')[0] || user.name?.split(' ')[0] || 'there'
+          if (!recipientEmail) continue
+          const digest = await generateWeeklyDigest(user.id)
+          const result = await sendWeeklyDigestEmail(digest, recipientEmail, recipientName)
+          console.log(`[scheduler] Digest for user ${user.id}: ${result.message}`)
+        } catch (e) {
+          console.error(`[scheduler] Digest failed for user ${user.id}:`, e)
+        }
+      }
+    } catch (e) {
+      console.error('[scheduler] Weekly digest run failed:', e)
     }
   })
 

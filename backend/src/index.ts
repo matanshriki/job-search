@@ -13,6 +13,7 @@ import dashboardRouter from './routes/dashboard'
 import agentsRouter from './routes/agents'
 import jobBoardsRouter from './routes/jobBoards'
 import queueRouter from './routes/queue'
+import digestRouter from './routes/digest'
 import importExportRouter from './routes/importExport'
 import authRouter, { setupPassport } from './routes/auth'
 import prisma from './db/client'
@@ -68,6 +69,7 @@ app.use('/api/dashboard', dashboardRouter)
 app.use('/api/agents', agentsRouter)
 app.use('/api/job-boards', jobBoardsRouter)
 app.use('/api/queue', queueRouter)
+app.use('/api/digest', digestRouter)
 app.use('/api/export', importExportRouter)
 app.use('/api/import', importExportRouter)
 

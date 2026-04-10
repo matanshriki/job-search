@@ -18,6 +18,7 @@ import { GeneratedAssetsPage } from '@/pages/GeneratedAssetsPage'
 import { SourceHealthPage } from '@/pages/SourceHealthPage'
 import { JobBoardsPage } from '@/pages/JobBoardsPage'
 import { ApprovalQueuePage } from '@/pages/ApprovalQueuePage'
+import { WeeklyDigestPage } from '@/pages/WeeklyDigestPage'
 import { useEffect } from 'react'
 
 function AppRoutes() {
@@ -57,6 +58,7 @@ function AppRoutes() {
         <Route path="source-health" element={<SourceHealthPage />} />
         <Route path="job-boards" element={<JobBoardsPage />} />
         <Route path="queue" element={<ApprovalQueuePage />} />
+        <Route path="digest" element={<WeeklyDigestPage />} />
         <Route path="data" element={<ImportExportPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

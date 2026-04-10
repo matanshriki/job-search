@@ -2,6 +2,7 @@ import {
   Activity,
   Briefcase,
   Building2,
+  CalendarDays,
   ClipboardList,
   Database,
   FileText,
@@ -36,6 +37,7 @@ const nav = [
 ]
 
 const agentNav = [
+  { to: '/digest', label: 'Weekly Digest', icon: CalendarDays },
   { to: '/resumes', label: 'Resume Library', icon: FileText },
   { to: '/assets', label: 'Generated Assets', icon: Sparkles },
   { to: '/agent-runs', label: 'Agent Runs', icon: Activity },
