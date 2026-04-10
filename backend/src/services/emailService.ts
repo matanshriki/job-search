@@ -28,9 +28,19 @@ import dns from 'node:dns'
 
 import type { WeeklyDigestData } from './weeklyDigest'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY
+/** Strip whitespace / accidental quotes — common when pasting into Railway. */
+function normalizeSecret(raw: string | undefined): string {
+  if (!raw) return ''
+  let s = raw.trim()
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1).trim()
+  }
+  return s
+}
+
+const RESEND_API_KEY = normalizeSecret(process.env.RESEND_API_KEY)
 /** Default Resend sandbox sender; production: verify a domain at resend.com and set RESEND_FROM. */
-const RESEND_FROM = process.env.RESEND_FROM ?? 'Job Search Copilot <onboarding@resend.dev>'
+const RESEND_FROM = normalizeSecret(process.env.RESEND_FROM) || 'Job Search Copilot <onboarding@resend.dev>'
 
 const SMTP_HOST = process.env.SMTP_HOST
 const SMTP_PORT = parseInt(process.env.SMTP_PORT ?? '587', 10)
@@ -275,6 +285,34 @@ function buildWeeklyDigestHtml(data: WeeklyDigestData, recipientName: string): s
 
 // ─── Resend (HTTPS :443 — works where SMTP is blocked) ────────────────────────
 
+function resendFailureHint(apiMessage: string): string {
+  const m = apiMessage.toLowerCase()
+  if (
+    m.includes('api key') ||
+    m.includes('validation') ||
+    m.includes('unauthorized') ||
+    m.includes('invalid') ||
+    m.includes('forbidden')
+  ) {
+    return (
+      ' Create a new key in the Resend dashboard (API Keys) — it must start with re_. ' +
+      'Paste it into Railway with no extra spaces, quotes, or line breaks. Save variables and redeploy.'
+    )
+  }
+  if (
+    m.includes('domain') ||
+    m.includes('onboarding') ||
+    m.includes('only') ||
+    m.includes('not allowed to send')
+  ) {
+    return (
+      ' With onboarding@resend.dev you can usually only send to the email you used to sign up at Resend. ' +
+      'Verify a domain in Resend and set RESEND_FROM to an address on that domain for any recipient.'
+    )
+  }
+  return ' See https://resend.com/docs for this error.'
+}
+
 async function sendDigestViaResend(
   html: string,
   subject: string,
@@ -282,6 +320,13 @@ async function sendDigestViaResend(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const key = RESEND_API_KEY
   if (!key) return { ok: false, error: 'RESEND_API_KEY missing' }
+  if (!key.startsWith('re_')) {
+    return {
+      ok: false,
+      error:
+        'RESEND_API_KEY should start with re_. Check for a copy/paste mistake or create a new API key in the Resend dashboard.',
+    }
+  }
 
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), 25_000)
@@ -300,9 +345,13 @@ async function sendDigestViaResend(
       }),
       signal: ac.signal,
     })
-    const body = (await res.json().catch(() => ({}))) as { message?: string; name?: string }
+    const body = (await res.json().catch(() => ({}))) as {
+      message?: string | string[]
+      name?: string
+    }
     if (!res.ok) {
-      const detail = [body.message, body.name].filter(Boolean).join(' — ')
+      const msgPart = Array.isArray(body.message) ? body.message.join(', ') : body.message
+      const detail = [msgPart, body.name].filter(Boolean).join(' — ')
       return { ok: false, error: detail || `${res.status} ${res.statusText}` }
     }
     return { ok: true }
@@ -339,7 +388,7 @@ export async function sendWeeklyDigestEmail(
     }
     return {
       sent: false,
-      message: `${r.error}. Tip: with onboarding@resend.dev you can only send to your Resend-account email until you verify a domain.`,
+      message: `${r.error}.${resendFailureHint(r.error)}`,
     }
   }
 
