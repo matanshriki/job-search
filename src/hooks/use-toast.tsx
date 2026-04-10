@@ -62,7 +62,12 @@ export function useToast() {
 
   const toast = React.useCallback(
     (t: Omit<ToastData, 'id'>) => {
-      if (!dispatch) return
+      if (!dispatch) {
+        if (import.meta.env.DEV) {
+          console.warn('[toast] ToastStateProvider missing — toast skipped:', t.title ?? t.description)
+        }
+        return
+      }
       const id = genId()
       dispatch({
         type: 'ADD',

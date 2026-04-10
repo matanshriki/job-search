@@ -145,10 +145,18 @@ function PipelineBar({ snapshot }: { snapshot: Array<{ status: string; count: nu
 
 // ─── Email panel ──────────────────────────────────────────────────────────────
 
-function EmailPanel({ emailEnabled, onSend, sending }: {
+type SendBanner = { kind: 'success' | 'error'; message: string } | null
+
+function EmailPanel({
+  emailEnabled,
+  onSend,
+  sending,
+  sendBanner,
+}: {
   emailEnabled: boolean
   onSend: (email?: string) => void
   sending: boolean
+  sendBanner: SendBanner
 }) {
   const [customEmail, setCustomEmail] = useState('')
 
@@ -173,17 +181,36 @@ function EmailPanel({ emailEnabled, onSend, sending }: {
                 value={customEmail}
                 onChange={(e) => setCustomEmail(e.target.value)}
                 className="text-xs h-8"
+                disabled={sending}
               />
-              <Button size="sm" className="h-8 shrink-0" onClick={() => onSend(customEmail || undefined)} disabled={sending}>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={() => onSend(customEmail.trim() || undefined)}
+                disabled={sending}
+              >
                 {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
                 Send
               </Button>
             </div>
+            {sendBanner ? (
+              <div
+                role="status"
+                className={
+                  sendBanner.kind === 'success'
+                    ? 'rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100'
+                    : 'rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive-foreground'
+                }
+              >
+                {sendBanner.message}
+              </div>
+            ) : null}
           </>
         ) : (
           <>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Email is not configured yet. Add these to <code className="bg-muted px-1 rounded text-[11px]">backend/.env</code> (or Railway variables). Digests are sent to each user’s Google sign-in email.
+              The server is not configured to send email yet. Add these to Railway (or <code className="bg-muted px-1 rounded text-[11px]">backend/.env</code>). After redeploy, refresh this page — the Send button will appear here.
             </p>
             <div className="rounded-md bg-muted/30 border border-border/40 p-3 font-mono text-[11px] text-muted-foreground leading-relaxed space-y-0.5">
               <p>SMTP_HOST=smtp.gmail.com</p>
@@ -192,12 +219,11 @@ function EmailPanel({ emailEnabled, onSend, sending }: {
               <p className="text-amber-400/80">SMTP_PASS=your-app-password</p>
             </div>
             <p className="text-[11px] text-muted-foreground/60">
-              Gmail: go to myaccount.google.com → Security → 2-Step Verification → App Passwords
+              Gmail: Security → 2-Step Verification → App Passwords. Digests use each user’s Google sign-in email.
             </p>
-            <Button size="sm" variant="outline" className="h-8 w-full text-xs" disabled>
-              <Mail className="h-3.5 w-3.5 mr-1.5" />
-              Configure SMTP to send
-            </Button>
+            <div className="rounded-md border border-dashed border-border/60 px-3 py-2 text-center text-[11px] text-muted-foreground">
+              Send is unavailable until SMTP_* variables are set on the backend.
+            </div>
           </>
         )}
       </CardContent>
@@ -213,6 +239,7 @@ export function WeeklyDigestPage() {
   const [emailEnabled, setEmailEnabled] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [sendBanner, setSendBanner] = useState<SendBanner>(null)
 
   async function load() {
     setLoading(true)
@@ -230,16 +257,23 @@ export function WeeklyDigestPage() {
   useEffect(() => { load() }, [])
 
   async function handleSend(email?: string) {
+    setSendBanner(null)
     setSending(true)
     try {
       const result = await digestApi.send(email)
       if (result.sent) {
-        toast({ title: 'Digest sent!', description: result.message })
+        const msg = result.message || 'Check your inbox (and spam).'
+        setSendBanner({ kind: 'success', message: msg })
+        toast({ title: 'Digest sent', description: msg, variant: 'success' })
       } else {
-        toast({ title: 'Could not send', description: result.message, variant: 'destructive' })
+        const msg = result.message || 'SMTP is not configured on the server.'
+        setSendBanner({ kind: 'error', message: msg })
+        toast({ title: 'Email not sent', description: msg, variant: 'destructive' })
       }
     } catch (e) {
-      toast({ title: 'Send failed', description: String(e), variant: 'destructive' })
+      const msg = e instanceof Error ? e.message : String(e)
+      setSendBanner({ kind: 'error', message: msg })
+      toast({ title: 'Send failed', description: msg, variant: 'destructive' })
     } finally {
       setSending(false)
     }
@@ -362,7 +396,7 @@ export function WeeklyDigestPage() {
             </CardContent>
           </Card>
 
-          <EmailPanel emailEnabled={emailEnabled} onSend={handleSend} sending={sending} />
+          <EmailPanel emailEnabled={emailEnabled} onSend={handleSend} sending={sending} sendBanner={sendBanner} />
         </div>
       </div>
     </div>

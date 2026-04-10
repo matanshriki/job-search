@@ -235,7 +235,12 @@ export const dataApi = {
 
 export const digestApi = {
   get: () => get<{ digest: ApiWeeklyDigest; emailEnabled: boolean }>('/api/digest'),
-  send: (email?: string) => post<{ sent: boolean; message: string; digest: ApiWeeklyDigest }>('/api/digest/send', email ? { email } : undefined),
+  /** Use `{}` when no override so POST always has a JSON body (some hosts/proxies mishandle empty bodies). */
+  send: (email?: string) =>
+    post<{ sent: boolean; message: string; digest: ApiWeeklyDigest }>(
+      '/api/digest/send',
+      email ? { email } : {},
+    ),
 }
 
 // ─── Health ───────────────────────────────────────────────────────────────────
