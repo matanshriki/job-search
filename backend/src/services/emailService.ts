@@ -18,15 +18,22 @@
  * Optional tuning (defaults are tuned for Railway / slow SMTP):
  *   SMTP_CONNECTION_TIMEOUT_MS  (default 12000)
  *   SMTP_SOCKET_TIMEOUT_MS      (default 25000)
+ *   SMTP_IPV4_ONLY=false        (default: force IPv4 — fixes ENETUNREACH to Gmail on hosts without IPv6)
  */
+
+import dns from 'node:dns'
 
 import type { WeeklyDigestData } from './weeklyDigest'
 
 const SMTP_HOST = process.env.SMTP_HOST
 const SMTP_PORT = parseInt(process.env.SMTP_PORT ?? '587', 10)
 const SMTP_USER = process.env.SMTP_USER
-const SMTP_PASS = process.env.SMTP_PASS
+/** Gmail app passwords are often pasted with spaces — strip them. */
+const SMTP_PASS = process.env.SMTP_PASS?.replace(/\s+/g, '') ?? ''
 const SMTP_FROM = process.env.SMTP_FROM ?? SMTP_USER
+
+/** Railway / many clouds have no usable IPv6 route; Gmail’s AAAA record then gives ENETUNREACH. Force IPv4. */
+const SMTP_IPV4_ONLY = process.env.SMTP_IPV4_ONLY !== 'false'
 
 export function isEmailEnabled(): boolean {
   return !!(SMTP_HOST && SMTP_USER && SMTP_PASS)
@@ -47,6 +54,13 @@ async function createTransport() {
     connectionTimeout: SMTP_CONNECTION_MS,
     greetingTimeout: SMTP_CONNECTION_MS,
     socketTimeout: SMTP_SOCKET_MS,
+    ...(SMTP_IPV4_ONLY
+      ? {
+          lookup: (hostname: string, _options: object, callback: (err: Error | null, address: string, family?: number) => void) => {
+            dns.lookup(hostname, { family: 4 }, callback)
+          },
+        }
+      : {}),
   })
 }
 
