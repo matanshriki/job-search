@@ -13,13 +13,34 @@ function getAuthHeaders(): Record<string, string> {
 
 async function request<T>(
   path: string,
-  options?: RequestInit,
+  options?: RequestInit & { timeoutMs?: number },
 ): Promise<T> {
   const url = `${API_BASE}${path}`
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options?.headers },
-    ...options,
-  })
+  const { timeoutMs, signal: userSignal, ...fetchOptions } = options ?? {}
+  const controller = typeof timeoutMs === 'number' && timeoutMs > 0 ? new AbortController() : null
+  const timeoutId =
+    controller && timeoutMs
+      ? window.setTimeout(() => controller.abort(), timeoutMs)
+      : undefined
+
+  let res: Response
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...fetchOptions.headers },
+      ...fetchOptions,
+      signal: userSignal ?? controller?.signal,
+    })
+  } catch (e) {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new Error(
+        'Request timed out. The server may be slow or blocked from reaching your mail provider (SMTP). Check Railway logs and SMTP settings.',
+      )
+    }
+    throw e
+  }
+  if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+
   if (res.status === 401) {
     // Token expired or invalid — clear it and let the app redirect to login
     localStorage.removeItem(TOKEN_KEY)
@@ -38,8 +59,12 @@ function get<T>(path: string) {
   return request<T>(path, { method: 'GET' })
 }
 
-function post<T>(path: string, body?: unknown) {
-  return request<T>(path, { method: 'POST', body: body !== undefined ? JSON.stringify(body) : undefined })
+function post<T>(path: string, body?: unknown, opts?: { timeoutMs?: number }) {
+  return request<T>(path, {
+    method: 'POST',
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    timeoutMs: opts?.timeoutMs,
+  })
 }
 
 function put<T>(path: string, body: unknown) {
@@ -240,6 +265,7 @@ export const digestApi = {
     post<{ sent: boolean; message: string; digest: ApiWeeklyDigest }>(
       '/api/digest/send',
       email ? { email } : {},
+      { timeoutMs: 90_000 },
     ),
 }
 

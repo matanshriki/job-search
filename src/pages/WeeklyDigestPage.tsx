@@ -257,10 +257,22 @@ export function WeeklyDigestPage() {
   useEffect(() => { load() }, [])
 
   async function handleSend(email?: string) {
+    const trimmed = email?.trim()
+    if (trimmed) {
+      const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)
+      if (!ok) {
+        const msg =
+          'Enter a valid email address, or leave the field blank to use your Google sign-in email.'
+        setSendBanner({ kind: 'error', message: msg })
+        toast({ title: 'Invalid email', description: msg, variant: 'destructive' })
+        return
+      }
+    }
+
     setSendBanner(null)
     setSending(true)
     try {
-      const result = await digestApi.send(email)
+      const result = await digestApi.send(trimmed || undefined)
       if (result.sent) {
         const msg = result.message || 'Check your inbox (and spam).'
         setSendBanner({ kind: 'success', message: msg })

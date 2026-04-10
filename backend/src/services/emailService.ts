@@ -14,6 +14,10 @@
  * address — the app sends one message per user.
  *
  * If SMTP_HOST is not set, email sending is skipped.
+ *
+ * Optional tuning (defaults are tuned for Railway / slow SMTP):
+ *   SMTP_CONNECTION_TIMEOUT_MS  (default 12000)
+ *   SMTP_SOCKET_TIMEOUT_MS      (default 25000)
  */
 
 import type { WeeklyDigestData } from './weeklyDigest'
@@ -28,6 +32,10 @@ export function isEmailEnabled(): boolean {
   return !!(SMTP_HOST && SMTP_USER && SMTP_PASS)
 }
 
+/** Nodemailer defaults can wait many minutes on blocked SMTP ports — keep UX predictable. */
+const SMTP_CONNECTION_MS = parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS ?? '12000', 10)
+const SMTP_SOCKET_MS = parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS ?? '25000', 10)
+
 /** Lazy-load nodemailer (pulls in TLS/native code) only when actually sending mail. */
 async function createTransport() {
   const { default: nodemailer } = await import('nodemailer')
@@ -36,6 +44,25 @@ async function createTransport() {
     port: SMTP_PORT,
     secure: SMTP_PORT === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
+    connectionTimeout: SMTP_CONNECTION_MS,
+    greetingTimeout: SMTP_CONNECTION_MS,
+    socketTimeout: SMTP_SOCKET_MS,
+  })
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} (exceeded ${ms}ms)`)), ms)
+    p.then(
+      (v) => {
+        clearTimeout(t)
+        resolve(v)
+      },
+      (e) => {
+        clearTimeout(t)
+        reject(e)
+      },
+    )
   })
 }
 
@@ -220,12 +247,26 @@ export async function sendWeeklyDigestEmail(
   const transporter = await createTransport()
   const html = buildWeeklyDigestHtml(data, recipientName)
 
-  await transporter.sendMail({
-    from: `"Job Search Copilot" <${SMTP_FROM}>`,
-    to: recipientEmail,
-    subject: `Your weekly job search summary — ${data.period.label}`,
-    html,
-  })
+  const sendMs = Math.min(60000, SMTP_SOCKET_MS + 15000)
+  try {
+    await withTimeout(
+      transporter.sendMail({
+        from: `"Job Search Copilot" <${SMTP_FROM}>`,
+        to: recipientEmail,
+        subject: `Your weekly job search summary — ${data.period.label}`,
+        html,
+      }),
+      sendMs,
+      'SMTP sendMail',
+    )
+  } catch (e) {
+    const hint =
+      ' Check SMTP_HOST/SMTP_PORT (587 for Gmail), app password, and that your host allows outbound SMTP (some clouds block port 587).'
+    return {
+      sent: false,
+      message: `${e instanceof Error ? e.message : String(e)}.${hint}`,
+    }
+  }
 
   return { sent: true, message: `Digest sent to ${recipientEmail}` }
 }
