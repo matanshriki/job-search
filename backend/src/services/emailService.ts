@@ -44,6 +44,10 @@ function scoreColor(score: number): string {
   return '#6b7280'
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
     new: 'New', considering: 'Considering', applied: 'Applied',
@@ -117,6 +121,7 @@ function buildWeeklyDigestHtml(data: WeeklyDigestData, recipientName: string): s
       <h1 style="color:#f1f5f9;font-size:24px;font-weight:700;margin:0 0 6px 0;">
         Your Weekly Job Search Summary
       </h1>
+      <p style="color:#94a3b8;font-size:14px;margin:0 0 8px 0;">Hi ${escapeHtml(recipientName)}, here is your recap.</p>
       <p style="color:#64748b;font-size:14px;margin:0;">${period.label}</p>
     </div>
 
