@@ -12,6 +12,7 @@ import prisma from '../db/client'
 import { scanCompanyCareerPage, jobDuplicateKey } from '../services/parsing/careerScanner'
 import { scoreJobAgainstProfile, fitLabel } from '../services/scoring/matchEngine'
 import { buildProfileFromDb } from '../utils/profileHelpers'
+import { eventBus } from '../services/eventBus'
 
 export interface ScoutAgentResult {
   companyId: number
@@ -203,6 +204,14 @@ export async function runScoutAgentForCompany(companyId: number, userId?: number
             },
           })
         }
+
+        // Emit event so the pipeline orchestrator can chain fit analysis + queue creation
+        eventBus.emit('job.created', {
+          jobPostingId: newJob.id,
+          fitScore: scoreResult.total,
+          userId: ownerId,
+          source: 'scout',
+        })
 
         createdThisScan.add(key)
         jobsCreated++

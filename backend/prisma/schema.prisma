@@ -16,10 +16,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profiles    Profile[]
-  companies   TargetCompany[]
-  resumes     Resume[]
-  appSettings AppSettings[]
+  profiles       Profile[]
+  companies      TargetCompany[]
+  resumes        Resume[]
+  appSettings    AppSettings[]
+  jobBoardSources JobBoardSource[]
+  approvalQueue  ApprovalQueueItem[]
 
   @@map("users")
 }
@@ -131,13 +133,14 @@ model JobPosting {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  company       TargetCompany?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  match         JobMatch?
+  company         TargetCompany?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  match           JobMatch?
   generatedAssets GeneratedAsset[]
-  agentRuns     AgentRun[]
-  jobNotes      JobNote[]
-  notifications Notification[]
-  activityLogs  ActivityLog[]
+  agentRuns       AgentRun[]
+  jobNotes        JobNote[]
+  notifications   Notification[]
+  activityLogs    ActivityLog[]
+  approvalQueue   ApprovalQueueItem[]
 
   @@map("job_postings")
 }
@@ -259,18 +262,56 @@ model ActivityLog {
 }
 
 model AppSettings {
-  id                    Int      @id @default(autoincrement())
-  userId                Int      @unique
-  minRelevantScore      Int      @default(55)
-  autoScanIntervalHours Int      @default(6)
-  autoRunFitAnalysis    Boolean  @default(true)
-  fitAnalysisThreshold  Int      @default(55)
-  jobsFeedJson          String   @default("{}")
-  savedJobViewsJson     String   @default("[]")
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                      Int      @id @default(autoincrement())
+  userId                  Int      @unique
+  minRelevantScore        Int      @default(55)
+  autoScanIntervalHours   Int      @default(6)
+  autoRunFitAnalysis      Boolean  @default(true)
+  fitAnalysisThreshold    Int      @default(55)
+  jobsFeedJson            String   @default("{}")
+  savedJobViewsJson       String   @default("[]")
+  // Pipeline orchestrator settings
+  autoPipelineEnabled     Boolean  @default(true)
+  autoQueueThreshold      Int      @default(80)
+  autoPipelineActionsJson String   @default("[\"fit_analysis\",\"resume_tailoring\",\"outreach\"]")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("app_settings")
+}
+
+model JobBoardSource {
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  boardType        String    // remotive | adzuna | wellfound
+  searchConfigJson String    @default("{}") // { keywords, category, location, limit }
+  active           Boolean   @default(true)
+  lastCheckedAt    DateTime?
+  lastJobsFound    Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("job_board_sources")
+}
+
+model ApprovalQueueItem {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  jobPostingId Int
+  actionType   String    @default("send_outreach") // send_outreach | auto_apply
+  status       String    @default("pending_review") // pending_review | approved | rejected | sent
+  payloadJson  String    @default("{}") // { fitSummary, outreachDraft, resumeBullets, jobTitle, company }
+  reviewedAt   DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobPosting JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+
+  @@map("approval_queue_items")
 }

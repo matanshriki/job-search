@@ -2,6 +2,7 @@ import cron from 'node-cron'
 import prisma from '../db/client'
 import { runScoutAgentForAllCompanies } from '../agents/scoutAgent'
 import { runFitAnalystAgent } from '../agents/fitAnalystAgent'
+import { runJobBoardCrawlerForAllUsers } from '../agents/jobBoardCrawlerAgent'
 
 const SCHEDULER_ENABLED = process.env.SCHEDULER_ENABLED !== 'false'
 const SCAN_INTERVAL_HOURS = parseInt(process.env.SCAN_INTERVAL_HOURS ?? '6', 10)
@@ -15,7 +16,7 @@ export function startScheduler() {
 
   console.log(`[scheduler] Starting — scan interval: ${SCAN_INTERVAL_HOURS}h, fit threshold: ${FIT_THRESHOLD}`)
 
-  // Periodic company scan
+  // Periodic company career-page scan
   const scanCronExpr = `0 */${SCAN_INTERVAL_HOURS} * * *`
   cron.schedule(scanCronExpr, async () => {
     console.log('[scheduler] Running scheduled scan for all active companies...')
@@ -25,6 +26,18 @@ export function startScheduler() {
       console.log(`[scheduler] Scan complete — ${totalNew} new jobs found across ${results.length} companies`)
     } catch (e) {
       console.error('[scheduler] Scan failed:', e)
+    }
+  })
+
+  // Periodic job board crawl — staggered by 30 minutes from company scans
+  const crawlCronExpr = `30 */${SCAN_INTERVAL_HOURS} * * *`
+  cron.schedule(crawlCronExpr, async () => {
+    console.log('[scheduler] Running scheduled job board crawl for all users...')
+    try {
+      await runJobBoardCrawlerForAllUsers()
+      console.log('[scheduler] Job board crawl complete')
+    } catch (e) {
+      console.error('[scheduler] Job board crawl failed:', e)
     }
   })
 

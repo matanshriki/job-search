@@ -186,6 +186,33 @@ export const agentsApi = {
     ),
 }
 
+// ─── Job Boards ───────────────────────────────────────────────────────────────
+
+export const jobBoardsApi = {
+  getSources: () => get<{ sources: ApiJobBoardSource[] }>('/api/job-boards/sources'),
+  createSource: (data: { boardType: string; searchConfig?: Record<string, unknown> }) =>
+    post<{ source: ApiJobBoardSource }>('/api/job-boards/sources', data),
+  updateSource: (id: number, data: { active?: boolean; searchConfig?: Record<string, unknown> }) =>
+    put<{ source: ApiJobBoardSource }>(`/api/job-boards/sources/${id}`, data),
+  deleteSource: (id: number) => del(`/api/job-boards/sources/${id}`),
+  crawlAll: () => post<{ results: ApiCrawlSourceResult[]; totalCreated: number; totalFound: number }>('/api/job-boards/crawl'),
+  crawlSource: (id: number) => post<{ result: ApiCrawlSourceResult }>(`/api/job-boards/sources/${id}/crawl`),
+}
+
+// ─── Approval Queue ───────────────────────────────────────────────────────────
+
+export const queueApi = {
+  list: (params?: { status?: string; limit?: string }) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return get<{ items: ApiApprovalQueueItem[]; pendingCount: number }>(`/api/queue${qs}`)
+  },
+  get: (id: number) => get<{ item: ApiApprovalQueueItem }>(`/api/queue/${id}`),
+  update: (id: number, payload: Record<string, unknown>) =>
+    put<{ item: ApiApprovalQueueItem }>(`/api/queue/${id}`, { payload }),
+  approve: (id: number) => post<{ item: ApiApprovalQueueItem }>(`/api/queue/${id}/approve`),
+  reject: (id: number) => post<{ item: ApiApprovalQueueItem }>(`/api/queue/${id}/reject`),
+}
+
 // ─── Import/Export ────────────────────────────────────────────────────────────
 
 export const dataApi = {
@@ -438,6 +465,7 @@ export interface ApiDashboardStats {
     withGeneratedPrepCount: number
     unreadNotifications: number
     minScore: number
+    pendingQueueCount: number
   }
   topMatches: ApiJob[]
   recentScans: ApiScanRun[]
@@ -463,6 +491,55 @@ export interface ApiAppSettings {
   fitAnalysisThreshold: number
   jobsFeedJson: string
   savedJobViewsJson: string
+  autoPipelineEnabled: boolean
+  autoQueueThreshold: number
+  autoPipelineActionsJson: string
+}
+
+export interface ApiJobBoardSource {
+  id: number
+  userId: number
+  boardType: string
+  searchConfigJson: string
+  active: boolean
+  lastCheckedAt: string | null
+  lastJobsFound: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ApiCrawlSourceResult {
+  sourceId: number
+  boardType: string
+  jobsFound: number
+  jobsCreated: number
+  jobsSkipped: number
+  success: boolean
+  message: string
+}
+
+export interface ApiApprovalQueuePayload {
+  fitScore: number
+  fitSummary: string
+  jobTitle: string
+  company: string
+  jobUrl: string
+  outreachDraft: string
+  resumeBullets: string
+}
+
+export interface ApiApprovalQueueItem {
+  id: number
+  userId: number
+  jobPostingId: number
+  actionType: string
+  status: string
+  payloadJson: string
+  reviewedAt: string | null
+  sentAt: string | null
+  createdAt: string
+  updatedAt: string
+  jobPosting?: { id: number; title: string; jobUrl: string; company: { name: string } | null } | null
 }
 
 export interface ApiJobsFilter {

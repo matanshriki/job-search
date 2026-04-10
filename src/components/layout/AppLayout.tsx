@@ -5,6 +5,8 @@ import {
   ClipboardList,
   Database,
   FileText,
+  Globe,
+  Inbox,
   LayoutDashboard,
   LogOut,
   PlusCircle,
@@ -15,17 +17,20 @@ import {
   WifiOff,
 } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useAppState } from '@/context/app-state-compat'
 import { useAuth } from '@/context/AuthContext'
+import { queueApi } from '@/services/api'
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/jobs', label: 'Jobs Feed', icon: Briefcase },
   { to: '/companies', label: 'Companies', icon: Building2 },
+  { to: '/job-boards', label: 'Job Boards', icon: Globe },
   { to: '/intake', label: 'Manual Intake', icon: PlusCircle },
   { to: '/profile', label: 'Profile', icon: UserRound },
 ]
@@ -44,6 +49,14 @@ const toolsNav = [
 export function AppLayout() {
   const { loading, backendAvailable } = useAppState()
   const { user, logout } = useAuth()
+  const [pendingQueueCount, setPendingQueueCount] = useState(0)
+
+  useEffect(() => {
+    if (!backendAvailable) return
+    queueApi.list({ limit: '1' })
+      .then((d) => setPendingQueueCount(d.pendingCount))
+      .catch(() => {/* non-fatal */})
+  }, [backendAvailable])
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -90,6 +103,28 @@ export function AppLayout() {
                 Agent Layer
               </p>
             </div>
+
+            {/* Inbox — special nav item with pending badge */}
+            <NavLink
+              to="/queue"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+                  isActive
+                    ? 'bg-primary/12 text-primary shadow-sm ring-1 ring-primary/15'
+                    : 'text-muted-foreground hover:bg-white/[0.04] hover:text-foreground',
+                )
+              }
+            >
+              <Inbox className="h-4 w-4 shrink-0" />
+              <span className="flex-1">Inbox</span>
+              {pendingQueueCount > 0 && (
+                <Badge className="ml-auto h-5 px-1.5 text-[10px] font-bold">
+                  {pendingQueueCount}
+                </Badge>
+              )}
+            </NavLink>
+
             {agentNav.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
@@ -208,7 +243,7 @@ export function AppLayout() {
             <span className="font-display text-sm font-semibold">Job Search Copilot</span>
             <Separator orientation="vertical" className="h-6" />
             <nav className="flex flex-1 gap-1 overflow-x-auto">
-              {[...nav, ...agentNav, ...toolsNav].map(({ to, label }) => (
+              {[...nav, { to: '/queue', label: 'Inbox' }, ...agentNav, ...toolsNav].map(({ to, label }) => (
                 <NavLink
                   key={to}
                   to={to}

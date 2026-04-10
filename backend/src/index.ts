@@ -4,12 +4,15 @@ import cors from 'cors'
 import helmet from 'helmet'
 import passport from 'passport'
 import { startScheduler } from './services/scheduler'
+import { initPipelineOrchestrator } from './services/pipelineOrchestrator'
 import profileRouter from './routes/profile'
 import companiesRouter from './routes/companies'
 import jobsRouter from './routes/jobs'
 import resumesRouter from './routes/resumes'
 import dashboardRouter from './routes/dashboard'
 import agentsRouter from './routes/agents'
+import jobBoardsRouter from './routes/jobBoards'
+import queueRouter from './routes/queue'
 import importExportRouter from './routes/importExport'
 import authRouter, { setupPassport } from './routes/auth'
 import prisma from './db/client'
@@ -63,6 +66,8 @@ app.use('/api/jobs', jobsRouter)
 app.use('/api/resumes', resumesRouter)
 app.use('/api/dashboard', dashboardRouter)
 app.use('/api/agents', agentsRouter)
+app.use('/api/job-boards', jobBoardsRouter)
+app.use('/api/queue', queueRouter)
 app.use('/api/export', importExportRouter)
 app.use('/api/import', importExportRouter)
 
@@ -87,6 +92,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
   console.log()
 
+  initPipelineOrchestrator()
   startScheduler()
 })
 

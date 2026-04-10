@@ -7,16 +7,29 @@ import prisma from '../db/client'
 import { callAi } from '../services/aiService'
 import { buildFitAnalysisMessages } from '../prompts/fitAnalysis'
 import { buildProfileFromDb } from '../utils/profileHelpers'
+import { eventBus } from '../services/eventBus'
 import type { FitAnalysisOutput } from '../prompts/fitAnalysis'
 
-export async function runFitAnalystAgent(jobPostingId: number): Promise<{ assetId: number; output: FitAnalysisOutput }> {
+export async function runFitAnalystAgent(
+  jobPostingId: number,
+  userId?: number,
+): Promise<{ assetId: number; output: FitAnalysisOutput }> {
   const job = await prisma.jobPosting.findUnique({
     where: { id: jobPostingId },
     include: { match: true },
   })
   if (!job) throw new Error(`Job posting ${jobPostingId} not found`)
 
-  const profileRow = await prisma.profile.findFirst()
+  // Resolve userId: prefer explicit param, fall back to company owner
+  const resolvedUserId =
+    userId ??
+    (job.companyId
+      ? (await prisma.targetCompany.findUnique({ where: { id: job.companyId }, select: { userId: true } }))?.userId
+      : undefined)
+
+  const profileRow = resolvedUserId
+    ? await prisma.profile.findFirst({ where: { userId: resolvedUserId } })
+    : await prisma.profile.findFirst()
   if (!profileRow) throw new Error('No profile found — set up your profile first')
 
   const profile = buildProfileFromDb(profileRow)
@@ -96,6 +109,18 @@ export async function runFitAnalystAgent(jobPostingId: number): Promise<{ assetI
         jobPostingId,
       },
     })
+
+    // Emit event so the pipeline orchestrator can create the approval queue item
+    if (resolvedUserId) {
+      const rawOutput = output as unknown as Record<string, unknown>
+      eventBus.emit('fit_analysis.completed', {
+        jobPostingId,
+        fitScore: typeof rawOutput.fitScore === 'number' ? rawOutput.fitScore : (job.match?.fitScore ?? 0),
+        fitLabel: output.fitLabel,
+        userId: resolvedUserId,
+        fitSummary: output.fitSummary,
+      })
+    }
 
     return { assetId: asset.id, output }
   } catch (err) {

@@ -182,7 +182,16 @@ router.get('/settings', async (req, res) => {
     let settings = await prisma.appSettings.findUnique({ where: { userId: req.userId } })
     if (!settings) {
       settings = await prisma.appSettings.create({
-        data: { userId: req.userId, minRelevantScore: 55, autoScanIntervalHours: 6, autoRunFitAnalysis: true, fitAnalysisThreshold: 55 },
+        data: {
+          userId: req.userId,
+          minRelevantScore: 55,
+          autoScanIntervalHours: 6,
+          autoRunFitAnalysis: true,
+          fitAnalysisThreshold: 55,
+          autoPipelineEnabled: true,
+          autoQueueThreshold: 80,
+          autoPipelineActionsJson: '["fit_analysis","resume_tailoring","outreach"]',
+        },
       })
     }
     res.json({ ok: true, settings })
@@ -197,10 +206,12 @@ router.put('/settings', async (req, res) => {
     const {
       minRelevantScore, autoScanIntervalHours, autoRunFitAnalysis, fitAnalysisThreshold,
       jobsFeedJson, savedJobViewsJson,
+      autoPipelineEnabled, autoQueueThreshold, autoPipelineActionsJson,
     } = req.body as {
       minRelevantScore?: number; autoScanIntervalHours?: number
       autoRunFitAnalysis?: boolean; fitAnalysisThreshold?: number
       jobsFeedJson?: string; savedJobViewsJson?: string
+      autoPipelineEnabled?: boolean; autoQueueThreshold?: number; autoPipelineActionsJson?: string
     }
     const data: Record<string, unknown> = {}
     if (minRelevantScore !== undefined) data.minRelevantScore = minRelevantScore
@@ -209,6 +220,9 @@ router.put('/settings', async (req, res) => {
     if (fitAnalysisThreshold !== undefined) data.fitAnalysisThreshold = fitAnalysisThreshold
     if (jobsFeedJson !== undefined) data.jobsFeedJson = jobsFeedJson
     if (savedJobViewsJson !== undefined) data.savedJobViewsJson = savedJobViewsJson
+    if (autoPipelineEnabled !== undefined) data.autoPipelineEnabled = autoPipelineEnabled
+    if (autoQueueThreshold !== undefined) data.autoQueueThreshold = autoQueueThreshold
+    if (autoPipelineActionsJson !== undefined) data.autoPipelineActionsJson = autoPipelineActionsJson
 
     const createData = { userId: req.userId, ...data }
     const settings = await prisma.appSettings.upsert({

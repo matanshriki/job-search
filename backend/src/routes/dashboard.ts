@@ -22,7 +22,7 @@ router.get('/stats', async (req, res) => {
     const [
       totalJobs, relevantJobs, companiesCount, newJobsCount, highMatchCount,
       awaitingReviewCount, appliedCount, interviewingCount, withGeneratedPrepCount,
-      recentScans, unreadNotifications, recentAgentRuns, statusBreakdown,
+      recentScans, unreadNotifications, recentAgentRuns, statusBreakdown, pendingQueueCount,
     ] = await Promise.all([
       prisma.jobPosting.count({ where: jobsWhere }),
       prisma.jobPosting.count({ where: { ...jobsWhere, match: { fitScore: { gte: minScore } } } }),
@@ -60,6 +60,7 @@ router.get('/stats', async (req, res) => {
         where: { ...jobsWhere, match: { fitScore: { gte: minScore } } },
         _count: { id: true },
       }),
+      prisma.approvalQueueItem.count({ where: { userId: req.userId, status: 'pending_review' } }),
     ])
 
     const topMatches = await prisma.jobPosting.findMany({
@@ -83,7 +84,7 @@ router.get('/stats', async (req, res) => {
       stats: {
         totalJobs, relevantJobs, companiesCount, newJobsThisWeek: newJobsCount,
         highMatchCount, awaitingReviewCount, appliedCount, interviewingCount,
-        withGeneratedPrepCount, unreadNotifications, minScore,
+        withGeneratedPrepCount, unreadNotifications, minScore, pendingQueueCount,
       },
       topMatches,
       recentScans,
