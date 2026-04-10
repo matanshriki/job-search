@@ -13,6 +13,7 @@ import { scoreJobAgainstProfile, fitLabel } from '../services/scoring/matchEngin
 import { buildProfileFromDb } from '../utils/profileHelpers'
 import { jobDuplicateKey, NormalizedJobDraft } from '../services/parsing/careerScanner'
 import { fetchRemotiveJobs, RemotiveSearchConfig } from '../services/jobBoardParsers/remotive'
+import { fetchArbeitnowJobs, ArbeitnowSearchConfig } from '../services/jobBoardParsers/arbeitnow'
 import { eventBus } from '../services/eventBus'
 
 export interface CrawlSourceResult {
@@ -79,6 +80,15 @@ async function crawlSource(
         }
         drafts = await fetchRemotiveJobs(searchCfg)
         fetchMessage = `Fetched ${drafts.length} jobs from Remotive`
+        break
+      }
+      case 'arbeitnow': {
+        const searchCfg: ArbeitnowSearchConfig = {
+          search: typeof config.search === 'string' ? config.search : undefined,
+          limit: typeof config.limit === 'number' ? config.limit : 100,
+        }
+        drafts = await fetchArbeitnowJobs(searchCfg)
+        fetchMessage = `Fetched ${drafts.length} jobs from Arbeitnow`
         break
       }
       default:

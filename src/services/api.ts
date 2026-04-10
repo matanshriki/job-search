@@ -197,6 +197,12 @@ export const jobBoardsApi = {
   deleteSource: (id: number) => del(`/api/job-boards/sources/${id}`),
   crawlAll: () => post<{ results: ApiCrawlSourceResult[]; totalCreated: number; totalFound: number }>('/api/job-boards/crawl'),
   crawlSource: (id: number) => post<{ result: ApiCrawlSourceResult }>(`/api/job-boards/sources/${id}/crawl`),
+  bootstrap: () => post<{
+    sourcesCreated: string[]
+    searchQuery: string
+    crawlResult: unknown
+    message: string
+  }>('/api/job-boards/bootstrap'),
 }
 
 // ─── Approval Queue ───────────────────────────────────────────────────────────
