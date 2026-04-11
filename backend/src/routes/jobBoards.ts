@@ -30,7 +30,7 @@ router.post('/sources', async (req, res) => {
 
     if (!boardType) return res.status(400).json({ ok: false, error: 'boardType is required' })
 
-    const allowed = ['remotive', 'arbeitnow', 'adzuna', 'wellfound']
+    const allowed = ['remotive', 'arbeitnow', 'adzuna']
     if (!allowed.includes(boardType)) {
       return res.status(400).json({ ok: false, error: `boardType must be one of: ${allowed.join(', ')}` })
     }

@@ -39,15 +39,33 @@ const BOARD_META: Record<string, { label: string; description: string; color: st
   },
   adzuna: {
     label: 'Adzuna',
-    description: 'Global job board — requires a free API key from adzuna.com.',
+    description:
+      'Global listings — set ADZUNA_APP_ID and ADZUNA_APP_KEY on the backend (free at developer.adzuna.com).',
     color: 'text-purple-400',
   },
+  /** Legacy DB rows only — not addable */
   wellfound: {
-    label: 'Wellfound',
-    description: 'Startup & growth-stage roles — manual config.',
+    label: 'Wellfound (unsupported)',
+    description: 'Remove this source — no public API. Use Remotive, Arbeitnow, or Adzuna.',
     color: 'text-amber-400',
   },
 }
+
+/** Boards users can add (legacy rows may still reference removed types). */
+const ADDABLE_BOARD_TYPES = ['remotive', 'arbeitnow', 'adzuna'] as const
+
+const ADZUNA_COUNTRIES = [
+  { v: 'us', l: 'United States' },
+  { v: 'gb', l: 'United Kingdom' },
+  { v: 'de', l: 'Germany' },
+  { v: 'fr', l: 'France' },
+  { v: 'in', l: 'India' },
+  { v: 'au', l: 'Australia' },
+  { v: 'ca', l: 'Canada' },
+  { v: 'nl', l: 'Netherlands' },
+  { v: 'br', l: 'Brazil' },
+  { v: 'za', l: 'South Africa' },
+]
 
 const REMOTIVE_CATEGORIES = [
   'software-dev', 'design', 'data', 'devops-sysadmin', 'product',
@@ -60,6 +78,7 @@ interface SourceFormState {
   search: string
   category: string
   location: string
+  country: string
   limit: string
 }
 
@@ -264,7 +283,14 @@ export function JobBoardsPage() {
   const [crawlResults, setCrawlResults] = useState<{ results: ApiCrawlSourceResult[]; message?: string } | null>(null)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [addLoading, setAddLoading] = useState(false)
-  const [form, setForm] = useState<SourceFormState>({ boardType: 'remotive', search: '', category: '', location: '', limit: '50' })
+  const [form, setForm] = useState<SourceFormState>({
+    boardType: 'remotive',
+    search: '',
+    category: '',
+    location: '',
+    country: 'us',
+    limit: '50',
+  })
 
   async function loadSources() {
     try {
@@ -352,11 +378,12 @@ export function JobBoardsPage() {
       if (form.search.trim()) config.search = form.search.trim()
       if (form.category.trim()) config.category = form.category.trim()
       if (form.location.trim()) config.location = form.location.trim()
+      if (form.boardType === 'adzuna' && form.country) config.country = form.country
       if (form.limit) config.limit = parseInt(form.limit, 10)
       const data = await jobBoardsApi.createSource({ boardType: form.boardType, searchConfig: config })
       setSources((prev) => [data.source, ...prev])
       setShowAddDialog(false)
-      setForm({ boardType: 'remotive', search: '', category: '', location: '', limit: '50' })
+      setForm({ boardType: 'remotive', search: '', category: '', location: '', country: 'us', limit: '50' })
       toast({ title: 'Job board source added' })
     } catch (e) {
       toast({ title: 'Failed to add source', description: String(e), variant: 'destructive' })
@@ -446,8 +473,8 @@ export function JobBoardsPage() {
               <Select value={form.boardType} onValueChange={(v) => setForm((f) => ({ ...f, boardType: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {Object.entries(BOARD_META).map(([key, meta]) => (
-                    <SelectItem key={key} value={key}>{meta.label}</SelectItem>
+                  {ADDABLE_BOARD_TYPES.map((key) => (
+                    <SelectItem key={key} value={key}>{BOARD_META[key].label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -464,6 +491,36 @@ export function JobBoardsPage() {
               />
               <p className="text-xs text-muted-foreground">Leave blank to fetch all available jobs from that board</p>
             </div>
+            {form.boardType === 'adzuna' && (
+              <div className="space-y-1.5">
+                <Label>Country</Label>
+                <Select
+                  value={form.country}
+                  onValueChange={(v) => setForm((f) => ({ ...f, country: v }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ADZUNA_COUNTRIES.map((c) => (
+                      <SelectItem key={c.v} value={c.v}>{c.l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Backend must set ADZUNA_APP_ID and ADZUNA_APP_KEY (developer.adzuna.com).
+                </p>
+              </div>
+            )}
+            {form.boardType === 'adzuna' && (
+              <div className="space-y-1.5">
+                <Label>Location (optional)</Label>
+                <Input
+                  placeholder="e.g. San Francisco, London"
+                  value={form.location}
+                  onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">Passed to Adzuna as the &quot;where&quot; filter.</p>
+              </div>
+            )}
             {form.boardType === 'remotive' && (
               <div className="space-y-1.5">
                 <Label>Category (optional)</Label>

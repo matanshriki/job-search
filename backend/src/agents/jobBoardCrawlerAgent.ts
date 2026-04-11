@@ -14,6 +14,7 @@ import { buildProfileFromDb } from '../utils/profileHelpers'
 import { jobDuplicateKey, NormalizedJobDraft } from '../services/parsing/careerScanner'
 import { fetchRemotiveJobs, RemotiveSearchConfig } from '../services/jobBoardParsers/remotive'
 import { fetchArbeitnowJobs, ArbeitnowSearchConfig } from '../services/jobBoardParsers/arbeitnow'
+import { fetchAdzunaJobs, AdzunaSearchConfig } from '../services/jobBoardParsers/adzuna'
 import { eventBus } from '../services/eventBus'
 
 export interface CrawlSourceResult {
@@ -90,6 +91,33 @@ async function crawlSource(
         drafts = await fetchArbeitnowJobs(searchCfg)
         fetchMessage = `Fetched ${drafts.length} jobs from Arbeitnow`
         break
+      }
+      case 'adzuna': {
+        const searchCfg: AdzunaSearchConfig = {
+          what:
+            (typeof config.what === 'string' ? config.what : undefined) ??
+            (typeof config.search === 'string' ? config.search : undefined),
+          where:
+            (typeof config.where === 'string' ? config.where : undefined) ??
+            (typeof config.location === 'string' ? config.location : undefined),
+          country: typeof config.country === 'string' ? config.country : 'us',
+          limit: typeof config.limit === 'number' ? config.limit : 50,
+        }
+        drafts = await fetchAdzunaJobs(searchCfg)
+        fetchMessage = `Fetched ${drafts.length} jobs from Adzuna`
+        break
+      }
+      case 'wellfound': {
+        return {
+          sourceId,
+          boardType: source.boardType,
+          jobsFound: 0,
+          jobsCreated: 0,
+          jobsSkipped: 0,
+          success: false,
+          message:
+            'Wellfound is not supported — there is no public job-search API for server-side use. Remove this source and use Remotive, Arbeitnow, or Adzuna.',
+        }
       }
       default:
         return {
