@@ -1,6 +1,7 @@
 import {
   Building2,
   ClipboardPen,
+  Globe,
   Headphones,
   Leaf,
   Linkedin,
@@ -9,10 +10,10 @@ import {
 import type { JobSourceType } from '@/domain/types'
 import { cn } from '@/lib/utils'
 
-const STYLES: Record<
-  JobSourceType,
-  { className: string; icon: typeof Building2 }
-> = {
+type StyleCfg = { className: string; icon: typeof Building2 }
+
+/** Backend can emit ATS + job_board_* types not listed in JobSourceType — always resolve a style. */
+const STYLES: Record<string, StyleCfg> = {
   greenhouse: {
     icon: Leaf,
     className:
@@ -43,6 +44,42 @@ const STYLES: Record<
     className:
       'border-border bg-muted/80 text-muted-foreground ring-1 ring-inset ring-white/5',
   },
+  lever: {
+    icon: Building2,
+    className:
+      'border-sky-500/35 bg-gradient-to-br from-sky-500/15 to-cyan-500/5 text-sky-100',
+  },
+  ashby: {
+    icon: Building2,
+    className:
+      'border-violet-500/35 bg-gradient-to-br from-violet-500/15 to-purple-900/10 text-violet-100',
+  },
+  workable: {
+    icon: Building2,
+    className:
+      'border-teal-500/35 bg-gradient-to-br from-teal-500/15 to-emerald-900/10 text-teal-100',
+  },
+  job_board_remotive: {
+    icon: Globe,
+    className:
+      'border-cyan-500/40 bg-gradient-to-br from-cyan-500/20 to-blue-900/15 text-cyan-100',
+  },
+  job_board_arbeitnow: {
+    icon: Globe,
+    className:
+      'border-cyan-500/40 bg-gradient-to-br from-cyan-500/20 to-blue-900/15 text-cyan-100',
+  },
+  job_board_adzuna: {
+    icon: Globe,
+    className:
+      'border-cyan-500/40 bg-gradient-to-br from-cyan-500/20 to-blue-900/15 text-cyan-100',
+  },
+}
+
+const FALLBACK_STYLE: StyleCfg = {
+  icon: Globe,
+  className:
+    'border-border bg-muted/80 text-muted-foreground ring-1 ring-inset ring-white/5',
 }
 
 export function SourceBadge({
@@ -51,12 +88,12 @@ export function SourceBadge({
   className,
   size = 'default',
 }: {
-  sourceType: JobSourceType
+  sourceType: JobSourceType | string
   label: string
   className?: string
   size?: 'default' | 'sm'
 }) {
-  const cfg = STYLES[sourceType]
+  const cfg = STYLES[sourceType] ?? (sourceType.startsWith('job_board_') ? STYLES.job_board_remotive : FALLBACK_STYLE)
   const Icon = cfg.icon
   return (
     <span
