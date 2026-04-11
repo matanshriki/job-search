@@ -235,8 +235,10 @@ export const jobBoardsApi = {
 export const queueApi = {
   list: (params?: { status?: string; limit?: string }) => {
     const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
-    return get<{ items: ApiApprovalQueueItem[]; pendingCount: number }>(`/api/queue${qs}`)
+    return get<{ items: ApiApprovalQueueItem[]; pendingCount: number; totalCount: number }>(`/api/queue${qs}`)
   },
+  /** Deletes every inbox row for your account (all statuses). */
+  clearAll: () => post<{ deleted: number }>('/api/queue/clear', {}),
   get: (id: number) => get<{ item: ApiApprovalQueueItem }>(`/api/queue/${id}`),
   update: (id: number, payload: Record<string, unknown>) =>
     put<{ item: ApiApprovalQueueItem }>(`/api/queue/${id}`, { payload }),

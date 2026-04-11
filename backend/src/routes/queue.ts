@@ -32,7 +32,23 @@ router.get('/', async (req, res) => {
       where: { userId: req.userId, status: 'pending_review' },
     })
 
-    res.json({ ok: true, items, pendingCount })
+    const totalCount = await prisma.approvalQueueItem.count({
+      where: { userId: req.userId },
+    })
+
+    res.json({ ok: true, items, pendingCount, totalCount })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) })
+  }
+})
+
+// POST /api/queue/clear — remove all inbox items for the current user (any status)
+router.post('/clear', async (req, res) => {
+  try {
+    const result = await prisma.approvalQueueItem.deleteMany({
+      where: { userId: req.userId },
+    })
+    res.json({ ok: true, deleted: result.count })
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) })
   }

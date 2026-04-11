@@ -8,6 +8,7 @@ import {
   Pencil,
   ThumbsDown,
   ThumbsUp,
+  Trash2,
   X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -296,7 +297,9 @@ export function ApprovalQueuePage() {
   const { toast } = useToast()
   const [items, setItems] = useState<ApiApprovalQueueItem[]>([])
   const [pendingCount, setPendingCount] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [clearLoading, setClearLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState('pending_review')
   const [actionLoading, setActionLoading] = useState<number | null>(null)
 
@@ -306,6 +309,7 @@ export function ApprovalQueuePage() {
       const data = await queueApi.list({ status: status === 'all' ? 'all' : status })
       setItems(data.items)
       setPendingCount(data.pendingCount)
+      setTotalCount(data.totalCount ?? data.items.length)
     } catch {
       toast({ title: 'Failed to load inbox', variant: 'destructive' })
     } finally {
@@ -343,17 +347,55 @@ export function ApprovalQueuePage() {
     }
   }
 
+  async function handleClearInbox() {
+    if (
+      !window.confirm(
+        'Remove every item in your inbox (pending, approved, and skipped)? Jobs in your feed are not deleted — only these prepared packages. This cannot be undone.',
+      )
+    ) {
+      return
+    }
+    setClearLoading(true)
+    try {
+      const r = await queueApi.clearAll()
+      toast({
+        title: 'Inbox cleared',
+        description: r.deleted === 0 ? 'Nothing was in your inbox.' : `Removed ${r.deleted} item(s).`,
+      })
+      await loadItems(statusFilter)
+    } catch (e) {
+      toast({ title: 'Could not clear inbox', description: String(e), variant: 'destructive' })
+    } finally {
+      setClearLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Inbox"
         description="Applications prepared by your agents, ready for your review and one-click approval."
         actions={
-          pendingCount > 0 ? (
-            <Badge className="text-sm px-3 py-1">
-              {pendingCount} pending
-            </Badge>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {pendingCount > 0 ? (
+              <Badge className="text-sm px-3 py-1">
+                {pendingCount} pending
+              </Badge>
+            ) : null}
+            {totalCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                disabled={clearLoading || loading}
+                onClick={handleClearInbox}
+              >
+                {clearLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 mr-1.5" />}
+                Clear entire inbox
+              </Button>
+            )}
+          </div>
         }
       />
 
