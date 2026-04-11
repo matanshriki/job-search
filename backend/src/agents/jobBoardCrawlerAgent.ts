@@ -14,7 +14,8 @@ import { buildProfileFromDb } from '../utils/profileHelpers'
 import { jobDuplicateKey, NormalizedJobDraft } from '../services/parsing/careerScanner'
 import { fetchRemotiveJobs, RemotiveSearchConfig } from '../services/jobBoardParsers/remotive'
 import { fetchArbeitnowJobs, ArbeitnowSearchConfig } from '../services/jobBoardParsers/arbeitnow'
-import { fetchAdzunaJobs, AdzunaSearchConfig } from '../services/jobBoardParsers/adzuna'
+import { fetchAdzunaJobs } from '../services/jobBoardParsers/adzuna'
+import { mergeAdzunaConfigWithProfile } from '../services/jobBoardParsers/adzunaGeo'
 import { eventBus } from '../services/eventBus'
 
 export interface CrawlSourceResult {
@@ -68,6 +69,9 @@ async function crawlSource(
 
   const config = JSON.parse(source.searchConfigJson) as Record<string, unknown>
 
+  const profileRow = await prisma.profile.findFirst({ where: { userId } })
+  const profile = profileRow ? buildProfileFromDb(profileRow) : null
+
   let drafts: NormalizedJobDraft[] = []
   let fetchMessage = ''
 
@@ -93,18 +97,9 @@ async function crawlSource(
         break
       }
       case 'adzuna': {
-        const searchCfg: AdzunaSearchConfig = {
-          what:
-            (typeof config.what === 'string' ? config.what : undefined) ??
-            (typeof config.search === 'string' ? config.search : undefined),
-          where:
-            (typeof config.where === 'string' ? config.where : undefined) ??
-            (typeof config.location === 'string' ? config.location : undefined),
-          country: typeof config.country === 'string' ? config.country : 'us',
-          limit: typeof config.limit === 'number' ? config.limit : 50,
-        }
+        const searchCfg = mergeAdzunaConfigWithProfile(config, profile, profileRow)
         drafts = await fetchAdzunaJobs(searchCfg)
-        fetchMessage = `Fetched ${drafts.length} jobs from Adzuna`
+        fetchMessage = `Fetched ${drafts.length} jobs from Adzuna (${searchCfg.country}${searchCfg.where ? ` — ${searchCfg.where}` : ''})`
         break
       }
       case 'wellfound': {
@@ -146,10 +141,6 @@ async function crawlSource(
       message: msg,
     }
   }
-
-  // Load profile for scoring
-  const profileRow = await prisma.profile.findFirst({ where: { userId } })
-  const profile = profileRow ? buildProfileFromDb(profileRow) : null
 
   let jobsCreated = 0
   let jobsSkipped = 0

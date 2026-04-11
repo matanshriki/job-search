@@ -5,6 +5,9 @@
  * Requires server env (free tier at adzuna.com):
  *   ADZUNA_APP_ID
  *   ADZUNA_APP_KEY
+ *
+ * Country / where are merged with the user profile in `adzunaGeo.ts` so preferred
+ * locations (e.g. Israel) override a stale default of `us` from the source config.
  */
 
 import { NormalizedJobDraft, jobDuplicateKey } from '../parsing/careerScanner'

@@ -40,7 +40,7 @@ const BOARD_META: Record<string, { label: string; description: string; color: st
   adzuna: {
     label: 'Adzuna',
     description:
-      'Global listings — set ADZUNA_APP_ID and ADZUNA_APP_KEY on the backend (free at developer.adzuna.com).',
+      'Global listings — backend needs ADZUNA_APP_ID and ADZUNA_APP_KEY. Crawls use your profile preferred locations (e.g. Israel → il); the country dropdown only applies when you pick a region other than the default US.',
     color: 'text-purple-400',
   },
   /** Legacy DB rows only — not addable */
