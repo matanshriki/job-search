@@ -143,7 +143,7 @@ async function handleFitAnalysisCompleted(payload: {
 
   if (needsResume) {
     tasks.push(
-      runResumeTailorAgent(jobPostingId)
+      runResumeTailorAgent(jobPostingId, undefined, userId)
         .then((r) => { resumeContent = r.output ? JSON.stringify(r.output) : '' })
         .catch((err) => { console.error(`[pipeline] resume tailor failed for job ${jobPostingId}:`, err) }),
     )
@@ -151,7 +151,7 @@ async function handleFitAnalysisCompleted(payload: {
 
   if (needsOutreach) {
     tasks.push(
-      runOutreachAgent(jobPostingId)
+      runOutreachAgent(jobPostingId, userId)
         .then((r) => { outreachContent = r.output ? JSON.stringify(r.output) : '' })
         .catch((err) => { console.error(`[pipeline] outreach failed for job ${jobPostingId}:`, err) }),
     )

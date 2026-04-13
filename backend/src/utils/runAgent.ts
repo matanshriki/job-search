@@ -15,6 +15,7 @@ import { runFitAnalystAgent } from '../agents/fitAnalystAgent'
 import { runResumeTailorAgent } from '../agents/resumeTailorAgent'
 import { runOutreachAgent } from '../agents/outreachAgent'
 import { runInterviewPrepAgent } from '../agents/interviewPrepAgent'
+import { resolveJobOwnerUserId } from './jobOwner'
 
 async function main() {
   const [, , agentType, ...rest] = process.argv
@@ -37,8 +38,10 @@ async function main() {
     case 'fit': {
       const jobId = parseInt(rest[0] ?? '0', 10)
       if (!jobId) { console.error('Usage: runAgent.ts fit <jobId>'); process.exit(1) }
+      const ownerId = await resolveJobOwnerUserId(jobId)
+      if (ownerId == null) { console.error('Job has no company owner'); process.exit(1) }
       console.log(`Running fit analysis for job ${jobId}...`)
-      const result = await runFitAnalystAgent(jobId)
+      const result = await runFitAnalystAgent(jobId, ownerId)
       console.log(JSON.stringify(result.output, null, 2))
       break
     }
@@ -46,8 +49,10 @@ async function main() {
     case 'resume': {
       const jobId = parseInt(rest[0] ?? '0', 10)
       if (!jobId) { console.error('Usage: runAgent.ts resume <jobId>'); process.exit(1) }
+      const ownerId = await resolveJobOwnerUserId(jobId)
+      if (ownerId == null) { console.error('Job has no company owner'); process.exit(1) }
       console.log(`Running resume tailor for job ${jobId}...`)
-      const result = await runResumeTailorAgent(jobId)
+      const result = await runResumeTailorAgent(jobId, undefined, ownerId)
       console.log(JSON.stringify(result.output, null, 2))
       break
     }
@@ -55,8 +60,10 @@ async function main() {
     case 'outreach': {
       const jobId = parseInt(rest[0] ?? '0', 10)
       if (!jobId) { console.error('Usage: runAgent.ts outreach <jobId>'); process.exit(1) }
+      const ownerId = await resolveJobOwnerUserId(jobId)
+      if (ownerId == null) { console.error('Job has no company owner'); process.exit(1) }
       console.log(`Running outreach agent for job ${jobId}...`)
-      const result = await runOutreachAgent(jobId)
+      const result = await runOutreachAgent(jobId, ownerId)
       console.log(JSON.stringify(result.output, null, 2))
       break
     }
@@ -64,8 +71,10 @@ async function main() {
     case 'interview': {
       const jobId = parseInt(rest[0] ?? '0', 10)
       if (!jobId) { console.error('Usage: runAgent.ts interview <jobId>'); process.exit(1) }
+      const ownerId = await resolveJobOwnerUserId(jobId)
+      if (ownerId == null) { console.error('Job has no company owner'); process.exit(1) }
       console.log(`Running interview prep for job ${jobId}...`)
-      const result = await runInterviewPrepAgent(jobId)
+      const result = await runInterviewPrepAgent(jobId, ownerId)
       console.log(JSON.stringify(result.output, null, 2))
       break
     }

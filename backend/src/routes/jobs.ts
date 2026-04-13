@@ -312,16 +312,16 @@ router.post('/:id/run-agent/:agentType', async (req, res) => {
     let result: unknown
     switch (agentType) {
       case 'fit_analysis':
-        result = await runFitAnalystAgent(jobId)
+        result = await runFitAnalystAgent(jobId, req.userId)
         break
       case 'resume_tailoring':
-        result = await runResumeTailorAgent(jobId, req.body?.resumeId)
+        result = await runResumeTailorAgent(jobId, req.body?.resumeId, req.userId)
         break
       case 'outreach':
-        result = await runOutreachAgent(jobId)
+        result = await runOutreachAgent(jobId, req.userId)
         break
       case 'interview_prep':
-        result = await runInterviewPrepAgent(jobId)
+        result = await runInterviewPrepAgent(jobId, req.userId)
         break
       default:
         return res.status(400).json({ ok: false, error: `Unknown agent type: ${agentType}` })

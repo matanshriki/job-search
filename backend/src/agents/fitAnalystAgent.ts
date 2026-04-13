@@ -7,6 +7,7 @@ import prisma from '../db/client'
 import { callAi } from '../services/aiService'
 import { buildFitAnalysisMessages } from '../prompts/fitAnalysis'
 import { buildProfileFromDb } from '../utils/profileHelpers'
+import { resolveJobOwnerUserId } from '../utils/jobOwner'
 import { eventBus } from '../services/eventBus'
 import type { FitAnalysisOutput } from '../prompts/fitAnalysis'
 
@@ -20,20 +21,18 @@ export async function runFitAnalystAgent(
   })
   if (!job) throw new Error(`Job posting ${jobPostingId} not found`)
 
-  // Resolve userId: prefer explicit param, fall back to company owner
-  const resolvedUserId =
-    userId ??
-    (job.companyId
-      ? (await prisma.targetCompany.findUnique({ where: { id: job.companyId }, select: { userId: true } }))?.userId
-      : undefined)
+  const resolvedUserId = await resolveJobOwnerUserId(jobPostingId, userId)
+  if (resolvedUserId == null) {
+    throw new Error('Job has no owning company — cannot load profile for fit analysis')
+  }
 
-  const profileRow = resolvedUserId
-    ? await prisma.profile.findFirst({ where: { userId: resolvedUserId } })
-    : await prisma.profile.findFirst()
+  const profileRow = await prisma.profile.findFirst({ where: { userId: resolvedUserId } })
   if (!profileRow) throw new Error('No profile found — set up your profile first')
 
   const profile = buildProfileFromDb(profileRow)
-  const baseResume = await prisma.resume.findFirst({ where: { isBaseResume: true } })
+  const baseResume = await prisma.resume.findFirst({
+    where: { userId: resolvedUserId, isBaseResume: true },
+  })
 
   const agentRun = await prisma.agentRun.create({
     data: {

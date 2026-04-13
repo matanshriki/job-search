@@ -8,23 +8,28 @@ import prisma from '../db/client'
 import { callAi } from '../services/aiService'
 import { buildResumeTailoringMessages } from '../prompts/resumeTailoring'
 import { buildProfileFromDb } from '../utils/profileHelpers'
+import { resolveJobOwnerUserId } from '../utils/jobOwner'
 import type { ResumeTailoringOutput } from '../prompts/resumeTailoring'
 
 export async function runResumeTailorAgent(
   jobPostingId: number,
   resumeId?: number,
+  userId?: number,
 ): Promise<{ assetId: number; output: ResumeTailoringOutput }> {
   const job = await prisma.jobPosting.findUnique({ where: { id: jobPostingId } })
   if (!job) throw new Error(`Job posting ${jobPostingId} not found`)
 
-  const profileRow = await prisma.profile.findFirst()
+  const ownerId = await resolveJobOwnerUserId(jobPostingId, userId)
+  if (ownerId == null) throw new Error('Job has no owning company')
+
+  const profileRow = await prisma.profile.findFirst({ where: { userId: ownerId } })
   if (!profileRow) throw new Error('No profile found')
 
   const profile = buildProfileFromDb(profileRow)
 
   const resume = resumeId
-    ? await prisma.resume.findUnique({ where: { id: resumeId } })
-    : await prisma.resume.findFirst({ where: { isBaseResume: true } })
+    ? await prisma.resume.findFirst({ where: { id: resumeId, userId: ownerId } })
+    : await prisma.resume.findFirst({ where: { userId: ownerId, isBaseResume: true } })
 
   if (!resume?.rawText) {
     throw new Error('No resume with text found. Add a resume in the Resume Library first.')

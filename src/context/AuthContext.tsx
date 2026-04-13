@@ -38,23 +38,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
-  // On mount: check if there's a token in the URL (post-OAuth redirect)
+  // Post-OAuth: token is delivered in the URL *hash* (see backend /auth/google/callback).
+  // Still accept legacy ?auth_token= for one transition. Strip both from the address bar immediately.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const urlToken = params.get('auth_token')
-    const authError = params.get('auth_error')
+    const hashRaw = window.location.hash.replace(/^#/, '')
+    const hashParams = hashRaw ? new URLSearchParams(hashRaw) : null
+    const searchParams = new URLSearchParams(window.location.search)
+
+    const urlToken = hashParams?.get('auth_token') ?? searchParams.get('auth_token')
+    const authError = hashParams?.get('auth_error') ?? searchParams.get('auth_error')
+
+    const stripOAuthFromUrl = () => {
+      searchParams.delete('auth_token')
+      searchParams.delete('auth_error')
+      const qs = searchParams.toString()
+      window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`)
+    }
 
     if (urlToken) {
       localStorage.setItem(TOKEN_KEY, urlToken)
       setToken(urlToken)
-      // Clean the token from the URL without a page reload
-      const clean = window.location.href
-        .replace(/[?&]auth_token=[^&]*/, '')
-        .replace(/[?&]auth_error=[^&]*/, '')
-      window.history.replaceState({}, '', clean || window.location.pathname)
+      stripOAuthFromUrl()
     } else if (authError) {
       console.error('Auth error:', authError)
       clearAuth()
+      stripOAuthFromUrl()
     }
   }, [clearAuth])
 

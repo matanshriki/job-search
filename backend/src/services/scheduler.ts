@@ -8,6 +8,8 @@ import { generateWeeklyDigest } from './weeklyDigest'
 const SCHEDULER_ENABLED = process.env.SCHEDULER_ENABLED !== 'false'
 const SCAN_INTERVAL_HOURS = parseInt(process.env.SCAN_INTERVAL_HOURS ?? '6', 10)
 const FIT_THRESHOLD = parseInt(process.env.FIT_ANALYSIS_THRESHOLD ?? '55', 10)
+/** SQL pre-filter only; each tenant's AppSettings.fitAnalysisThreshold is applied per job below. */
+const FIT_SCHEDULER_MIN_SCORE = parseInt(process.env.FIT_ANALYSIS_SCHEDULER_MIN_SCORE ?? '40', 10)
 
 export function startScheduler() {
   if (!SCHEDULER_ENABLED) {
@@ -45,27 +47,36 @@ export function startScheduler() {
   // Run fit analysis on new relevant jobs that don't have analysis yet (every 30 mins)
   cron.schedule('*/30 * * * *', async () => {
     try {
-      const settings = await prisma.appSettings.findFirst()
-      const threshold = settings?.fitAnalysisThreshold ?? FIT_THRESHOLD
-      if (!(settings?.autoRunFitAnalysis ?? true)) return
-
-      // Find jobs above threshold without a fit_analysis asset
-      const jobsNeedingAnalysis = await prisma.jobPosting.findMany({
+      const candidates = await prisma.jobPosting.findMany({
         where: {
           isActive: true,
-          match: { fitScore: { gte: threshold } },
+          companyId: { not: null },
+          match: { fitScore: { gte: FIT_SCHEDULER_MIN_SCORE } },
           generatedAssets: { none: { assetType: 'fit_analysis' } },
         },
-        take: 5, // Process max 5 per run to avoid API overload
+        include: {
+          match: true,
+          company: { select: { userId: true } },
+        },
+        take: 40,
         orderBy: { discoveredAt: 'desc' },
       })
 
-      if (jobsNeedingAnalysis.length === 0) return
+      let processed = 0
+      for (const job of candidates) {
+        if (processed >= 5) break
+        const userId = job.company?.userId
+        if (!userId) continue
 
-      console.log(`[scheduler] Running fit analysis on ${jobsNeedingAnalysis.length} jobs...`)
-      for (const job of jobsNeedingAnalysis) {
+        const settings = await prisma.appSettings.findUnique({ where: { userId } })
+        if (!(settings?.autoRunFitAnalysis ?? true)) continue
+
+        const threshold = settings?.fitAnalysisThreshold ?? FIT_THRESHOLD
+        if ((job.match?.fitScore ?? 0) < threshold) continue
+
         try {
-          await runFitAnalystAgent(job.id)
+          await runFitAnalystAgent(job.id, userId)
+          processed++
           console.log(`[scheduler] Fit analysis complete for job ${job.id}: ${job.title}`)
         } catch (e) {
           console.error(`[scheduler] Fit analysis failed for job ${job.id}:`, e)

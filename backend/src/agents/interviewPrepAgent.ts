@@ -2,19 +2,26 @@ import prisma from '../db/client'
 import { callAi } from '../services/aiService'
 import { buildInterviewPrepMessages } from '../prompts/interviewPrep'
 import { buildProfileFromDb } from '../utils/profileHelpers'
+import { resolveJobOwnerUserId } from '../utils/jobOwner'
 import type { InterviewPrepOutput } from '../prompts/interviewPrep'
 
 export async function runInterviewPrepAgent(
   jobPostingId: number,
+  userId?: number,
 ): Promise<{ assetId: number; output: InterviewPrepOutput }> {
   const job = await prisma.jobPosting.findUnique({ where: { id: jobPostingId } })
   if (!job) throw new Error(`Job posting ${jobPostingId} not found`)
 
-  const profileRow = await prisma.profile.findFirst()
+  const ownerId = await resolveJobOwnerUserId(jobPostingId, userId)
+  if (ownerId == null) throw new Error('Job has no owning company')
+
+  const profileRow = await prisma.profile.findFirst({ where: { userId: ownerId } })
   if (!profileRow) throw new Error('No profile found')
 
   const profile = buildProfileFromDb(profileRow)
-  const baseResume = await prisma.resume.findFirst({ where: { isBaseResume: true } })
+  const baseResume = await prisma.resume.findFirst({
+    where: { userId: ownerId, isBaseResume: true },
+  })
   const companyName = job.companyId
     ? (await prisma.targetCompany.findUnique({ where: { id: job.companyId } }))?.name ?? ''
     : ''

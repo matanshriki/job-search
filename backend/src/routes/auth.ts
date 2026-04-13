@@ -47,10 +47,9 @@ export function setupPassport() {
             },
           })
 
-          if (isNewUser) {
-            // Check if there is unclaimed data under the system user (id=1).
-            // This happens when the app was seeded or used before auth was enabled.
-            // Reassign everything to the new real user automatically.
+          // NEVER auto-migrate user id=1 → a new Google account in production: the next person to
+          // sign up would receive another tenant's data. Enable only for intentional one-off imports.
+          if (isNewUser && process.env.ALLOW_LEGACY_USER1_DATA_MIGRATION === 'true') {
             const SYSTEM_USER_ID = 1
             const systemHasData = await prisma.targetCompany.count({ where: { userId: SYSTEM_USER_ID } })
 
@@ -61,7 +60,7 @@ export function setupPassport() {
                 prisma.resume.updateMany({ where: { userId: SYSTEM_USER_ID }, data: { userId: user.id } }),
                 prisma.appSettings.updateMany({ where: { userId: SYSTEM_USER_ID }, data: { userId: user.id } }),
               ])
-              console.log(`  ✓ Migrated system data → userId=${user.id} (${email})`)
+              console.log(`  ✓ Migrated legacy user 1 data → userId=${user.id} (${email})`)
             }
           }
 
@@ -116,18 +115,22 @@ router.get(
     const user = req.user as { id: number; email: string; name: string; avatarUrl: string }
     const token = signToken({ userId: user.id, email: user.email })
 
-    const frontendUrl =
-      process.env.FRONTEND_URL ?? 'http://localhost:5173'
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173'
 
-    // Redirect to frontend with token in the URL hash so it never hits server logs
-    res.redirect(`${frontendUrl}?auth_token=${token}`)
+    // Put the JWT in the URL *fragment* (hash), not the query string. Query tokens leak via
+    // Referer headers, server access logs, and analytics — and users can accidentally share them.
+    const target = new URL(frontendUrl, 'http://localhost')
+    target.hash = `auth_token=${encodeURIComponent(token)}`
+    res.redirect(target.toString())
   },
 )
 
 // GET /auth/failed
 router.get('/failed', (_req, res) => {
   const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173'
-  res.redirect(`${frontendUrl}?auth_error=login_failed`)
+  const target = new URL(frontendUrl, 'http://localhost')
+  target.hash = 'auth_error=login_failed'
+  res.redirect(target.toString())
 })
 
 // GET /auth/me — returns current user info (requires JWT)
