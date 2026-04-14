@@ -12,15 +12,6 @@ import { runInterviewPrepAgent } from '../agents/interviewPrepAgent'
 const router = Router()
 router.use(requireAuth)
 
-/** Get the set of company IDs that belong to the current user. */
-async function getUserCompanyIds(userId: number): Promise<number[]> {
-  const companies = await prisma.targetCompany.findMany({
-    where: { userId },
-    select: { id: true },
-  })
-  return companies.map((c) => c.id)
-}
-
 // GET /api/jobs
 router.get('/', async (req, res) => {
   try {
@@ -29,11 +20,9 @@ router.get('/', async (req, res) => {
       sort = 'score', hideOutsideProfileGeos, page = '1', limit = '100',
     } = req.query as Record<string, string>
 
-    const userCompanyIds = await getUserCompanyIds(req.userId)
-
     const where: Record<string, unknown> = {
+      userId: req.userId,
       isActive: true,
-      companyId: { in: userCompanyIds },
     }
 
     if (q) {
@@ -133,9 +122,8 @@ router.post('/', async (req, res) => {
 
     const normalizedKey = jobDuplicateKey(resolvedCompanyName, title, location ?? 'Unspecified')
 
-    const userCompanyIds = await getUserCompanyIds(req.userId)
     const existing = await prisma.jobPosting.findFirst({
-      where: { normalizedKey, companyId: { in: userCompanyIds } },
+      where: { normalizedKey, userId: req.userId },
     })
     if (existing) {
       return res.status(409).json({ ok: false, error: 'Duplicate job already exists', existingId: existing.id })
@@ -143,6 +131,7 @@ router.post('/', async (req, res) => {
 
     const job = await prisma.jobPosting.create({
       data: {
+        userId: req.userId,
         companyId: companyId ?? null,
         title,
         location: location ?? 'Unspecified',
@@ -195,9 +184,8 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const userCompanyIds = await getUserCompanyIds(req.userId)
     const job = await prisma.jobPosting.findFirst({
-      where: { id, companyId: { in: userCompanyIds } },
+      where: { id, userId: req.userId },
       include: {
         match: true,
         company: true,
@@ -218,9 +206,8 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const userCompanyIds = await getUserCompanyIds(req.userId)
     const existing = await prisma.jobPosting.findFirst({
-      where: { id, companyId: { in: userCompanyIds } },
+      where: { id, userId: req.userId },
     })
     if (!existing) return res.status(404).json({ ok: false, error: 'Not found' })
 
@@ -289,8 +276,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const userCompanyIds = await getUserCompanyIds(req.userId)
-    const existing = await prisma.jobPosting.findFirst({ where: { id, companyId: { in: userCompanyIds } } })
+    const existing = await prisma.jobPosting.findFirst({ where: { id, userId: req.userId } })
     if (!existing) return res.status(404).json({ ok: false, error: 'Not found' })
     await prisma.jobPosting.delete({ where: { id } })
     res.json({ ok: true })
@@ -305,8 +291,7 @@ router.post('/:id/run-agent/:agentType', async (req, res) => {
     const jobId = parseInt(req.params.id, 10)
     const { agentType } = req.params
 
-    const userCompanyIds = await getUserCompanyIds(req.userId)
-    const exists = await prisma.jobPosting.findFirst({ where: { id: jobId, companyId: { in: userCompanyIds } } })
+    const exists = await prisma.jobPosting.findFirst({ where: { id: jobId, userId: req.userId } })
     if (!exists) return res.status(404).json({ ok: false, error: 'Not found' })
 
     let result: unknown
@@ -337,8 +322,7 @@ router.post('/:id/run-agent/:agentType', async (req, res) => {
 router.get('/:id/assets', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const userCompanyIds = await getUserCompanyIds(req.userId)
-    const exists = await prisma.jobPosting.findFirst({ where: { id, companyId: { in: userCompanyIds } } })
+    const exists = await prisma.jobPosting.findFirst({ where: { id, userId: req.userId } })
     if (!exists) return res.status(404).json({ ok: false, error: 'Not found' })
     const assets = await prisma.generatedAsset.findMany({
       where: { jobPostingId: id },
@@ -354,8 +338,7 @@ router.get('/:id/assets', async (req, res) => {
 router.get('/:id/notes', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const userCompanyIds = await getUserCompanyIds(req.userId)
-    const exists = await prisma.jobPosting.findFirst({ where: { id, companyId: { in: userCompanyIds } } })
+    const exists = await prisma.jobPosting.findFirst({ where: { id, userId: req.userId } })
     if (!exists) return res.status(404).json({ ok: false, error: 'Not found' })
     const notes = await prisma.jobNote.findMany({
       where: { jobPostingId: id },
@@ -371,8 +354,7 @@ router.get('/:id/notes', async (req, res) => {
 router.post('/:id/notes', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const userCompanyIds = await getUserCompanyIds(req.userId)
-    const exists = await prisma.jobPosting.findFirst({ where: { id, companyId: { in: userCompanyIds } } })
+    const exists = await prisma.jobPosting.findFirst({ where: { id, userId: req.userId } })
     if (!exists) return res.status(404).json({ ok: false, error: 'Not found' })
     const { content, noteType } = req.body as { content: string; noteType?: string }
     if (!content) return res.status(400).json({ ok: false, error: 'content is required' })
@@ -389,8 +371,7 @@ router.post('/:id/notes', async (req, res) => {
 router.get('/:id/score', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const userCompanyIds = await getUserCompanyIds(req.userId)
-    const job = await prisma.jobPosting.findFirst({ where: { id, companyId: { in: userCompanyIds } } })
+    const job = await prisma.jobPosting.findFirst({ where: { id, userId: req.userId } })
     if (!job) return res.status(404).json({ ok: false, error: 'Not found' })
     const profileRow = await prisma.profile.findFirst({ where: { userId: req.userId } })
     if (!profileRow) return res.status(400).json({ ok: false, error: 'No profile configured' })

@@ -82,6 +82,7 @@ async function createApprovalQueueItem(
 
   await prisma.notification.create({
     data: {
+      userId,
       jobPostingId,
       channel: 'in_app',
       message: `Application package ready for review: ${job?.title ?? 'Unknown role'} at ${job?.company?.name ?? 'Unknown company'}`,

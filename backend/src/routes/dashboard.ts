@@ -17,7 +17,7 @@ router.get('/stats', async (req, res) => {
     const settings = await prisma.appSettings.findUnique({ where: { userId: req.userId } })
     const minScore = settings?.minRelevantScore ?? 55
 
-    const jobsWhere = { isActive: true, companyId: { in: userCompanyIds } }
+    const jobsWhere = { isActive: true, userId: req.userId }
 
     const [
       totalJobs, relevantJobs, companiesCount, newJobsCount, highMatchCount,
@@ -47,10 +47,10 @@ router.get('/stats', async (req, res) => {
         take: 8,
       }),
       prisma.notification.count({
-        where: { jobPosting: { companyId: { in: userCompanyIds } }, status: 'unread' },
+        where: { userId: req.userId, status: 'unread' },
       }),
       prisma.agentRun.findMany({
-        where: { jobPosting: { companyId: { in: userCompanyIds } } },
+        where: { jobPosting: { userId: req.userId } },
         orderBy: { startedAt: 'desc' },
         take: 5,
         include: { jobPosting: { select: { id: true, title: true } } },
@@ -100,9 +100,8 @@ router.get('/stats', async (req, res) => {
 // GET /api/dashboard/notifications
 router.get('/notifications', async (req, res) => {
   try {
-    const userCompanyIds = await getUserCompanyIds(req.userId)
     const notifications = await prisma.notification.findMany({
-      where: { jobPosting: { companyId: { in: userCompanyIds } } },
+      where: { userId: req.userId },
       include: { jobPosting: { select: { id: true, title: true } } },
       orderBy: { createdAt: 'desc' },
       take: 50,
@@ -117,9 +116,8 @@ router.get('/notifications', async (req, res) => {
 router.post('/notifications/:id/read', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10)
-    const userCompanyIds = await getUserCompanyIds(req.userId)
     const notif = await prisma.notification.findFirst({
-      where: { id, jobPosting: { companyId: { in: userCompanyIds } } },
+      where: { id, userId: req.userId },
     })
     if (!notif) return res.status(404).json({ ok: false, error: 'Not found' })
     await prisma.notification.update({ where: { id }, data: { status: 'read' } })
@@ -132,9 +130,8 @@ router.post('/notifications/:id/read', async (req, res) => {
 // POST /api/dashboard/notifications/read-all
 router.post('/notifications/read-all', async (req, res) => {
   try {
-    const userCompanyIds = await getUserCompanyIds(req.userId)
     await prisma.notification.updateMany({
-      where: { status: 'unread', jobPosting: { companyId: { in: userCompanyIds } } },
+      where: { status: 'unread', userId: req.userId },
       data: { status: 'read' },
     })
     res.json({ ok: true })

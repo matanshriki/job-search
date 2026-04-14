@@ -17,9 +17,8 @@ async function getUserCompanyIds(userId: number): Promise<number[]> {
 router.get('/runs', async (req, res) => {
   try {
     const { agentType, status, limit = '50' } = req.query as Record<string, string>
-    const userCompanyIds = await getUserCompanyIds(req.userId)
     const where: Record<string, unknown> = {
-      jobPosting: { companyId: { in: userCompanyIds } },
+      jobPosting: { userId: req.userId },
     }
     if (agentType) where.agentType = agentType
     if (status) where.status = status
@@ -138,8 +137,7 @@ router.post('/infer-careers-url', async (req, res) => {
 // GET /api/agents/status
 router.get('/status', async (req, res) => {
   try {
-    const userCompanyIds = await getUserCompanyIds(req.userId)
-    const jobsWhere = { companyId: { in: userCompanyIds } }
+    const jobsWhere = { userId: req.userId }
     const [totalRuns, failedRuns, pendingRuns, recentRuns] = await Promise.all([
       prisma.agentRun.count({ where: { jobPosting: jobsWhere } }),
       prisma.agentRun.count({ where: { jobPosting: jobsWhere, status: 'failed' } }),
@@ -161,8 +159,7 @@ router.get('/status', async (req, res) => {
 router.get('/assets', async (req, res) => {
   try {
     const { assetType, limit = '50' } = req.query as Record<string, string>
-    const userCompanyIds = await getUserCompanyIds(req.userId)
-    const where: Record<string, unknown> = { jobPosting: { companyId: { in: userCompanyIds } } }
+    const where: Record<string, unknown> = { jobPosting: { userId: req.userId } }
     if (assetType) where.assetType = assetType
     const assets = await prisma.generatedAsset.findMany({
       where: where as never,

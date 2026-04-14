@@ -223,7 +223,7 @@ async function main() {
       // Check for duplicates by normalizedKey
       if (j.normalizedKey) {
         const existing = await prisma.jobPosting.findFirst({
-          where: { normalizedKey: j.normalizedKey },
+          where: { normalizedKey: j.normalizedKey, userId },
         })
         if (existing) { jobsSkipped++; continue }
       }
@@ -243,6 +243,7 @@ async function main() {
       // JobNotes are for structured timestamped entries added after discovery.
       const newJob = await prisma.jobPosting.create({
         data: {
+          userId,
           companyId,
           title: j.title,
           location: j.location,

@@ -59,7 +59,7 @@ export async function generateWeeklyDigest(userId: number): Promise<WeeklyDigest
   })
   const companyIds = userCompanies.map((c) => c.id)
 
-  const jobsWhere = { companyId: { in: companyIds.length > 0 ? companyIds : [-1] }, isActive: true }
+  const jobsWhere = { userId, isActive: true }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
 
@@ -93,7 +93,7 @@ export async function generateWeeklyDigest(userId: number): Promise<WeeklyDigest
         agentType: 'fit_analyst',
         status: 'completed',
         startedAt: { gte: from },
-        jobPosting: { company: { userId } },
+        jobPosting: { userId },
       },
     }),
     prisma.jobBoardSource.count({ where: { userId } }),
@@ -154,7 +154,7 @@ export async function generateWeeklyDigest(userId: number): Promise<WeeklyDigest
 
   const grouped = await prisma.jobPosting.groupBy({
     by: ['status'],
-    where: { companyId: { in: companyIds.length > 0 ? companyIds : [-1] }, isActive: true },
+    where: { userId, isActive: true },
     _count: { id: true },
   })
 

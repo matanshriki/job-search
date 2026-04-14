@@ -16,6 +16,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx src/utils/seed.ts",
     "migrate:import": "tsx src/utils/migrate.ts",
+    "db:reassign-user": "tsx src/utils/reassignUserData.ts",
     "agent:scan": "tsx src/utils/runAgent.ts scan",
     "agent:fit": "tsx src/utils/runAgent.ts fit",
     "test": "vitest run"

@@ -122,7 +122,7 @@ router.post('/:id/approve', async (req, res) => {
 
     // Move the job to "applied" pipeline status
     await prisma.jobPosting.update({
-      where: { id: existing.jobPostingId },
+      where: { id: existing.jobPostingId, userId: req.userId },
       data: { status: 'applied' },
     })
 

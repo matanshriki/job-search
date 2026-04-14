@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
       prisma.profile.findFirst({ where: { userId: req.userId } }),
       prisma.targetCompany.findMany({ where: { userId: req.userId }, include: { sources: true } }),
       prisma.jobPosting.findMany({
-        where: { companyId: { in: userCompanyIds } },
+        where: { userId: req.userId },
         include: { match: true, jobNotes: true, company: { select: { name: true } } },
       }),
       prisma.scanRun.findMany({
@@ -118,20 +118,11 @@ router.post('/', async (req, res) => {
     const importData = (data ?? body) as Record<string, unknown>
 
     if (clearExisting) {
-      // Clear only this user's data
       const userCompanyIds = (
         await prisma.targetCompany.findMany({ where: { userId: req.userId }, select: { id: true } })
       ).map((c) => c.id)
-      await prisma.jobPosting.findMany({ where: { companyId: { in: userCompanyIds } } }).then(async (jobs) => {
-        const jobIds = jobs.map((j) => j.id)
-        await prisma.activityLog.deleteMany({ where: { jobPostingId: { in: jobIds } } })
-        await prisma.notification.deleteMany({ where: { jobPostingId: { in: jobIds } } })
-        await prisma.agentRun.deleteMany({ where: { jobPostingId: { in: jobIds } } })
-        await prisma.generatedAsset.deleteMany({ where: { jobPostingId: { in: jobIds } } })
-        await prisma.jobMatch.deleteMany({ where: { jobPostingId: { in: jobIds } } })
-        await prisma.jobNote.deleteMany({ where: { jobPostingId: { in: jobIds } } })
-        await prisma.jobPosting.deleteMany({ where: { id: { in: jobIds } } })
-      })
+      await prisma.notification.deleteMany({ where: { userId: req.userId } })
+      await prisma.jobPosting.deleteMany({ where: { userId: req.userId } })
       await prisma.scanRun.deleteMany({ where: { companyId: { in: userCompanyIds } } })
       await prisma.companySource.deleteMany({ where: { companyId: { in: userCompanyIds } } })
       await prisma.targetCompany.deleteMany({ where: { userId: req.userId } })
@@ -212,7 +203,7 @@ router.post('/', async (req, res) => {
     if (Array.isArray(importData.jobs)) {
       for (const j of importData.jobs as Array<Record<string, unknown>>) {
         const nkey = (j.normalizedKey as string) || jobDuplicateKey(j.company as string ?? '', j.title as string, j.location as string ?? '')
-        const existing = await prisma.jobPosting.findFirst({ where: { normalizedKey: nkey } })
+        const existing = await prisma.jobPosting.findFirst({ where: { normalizedKey: nkey, userId: req.userId } })
         if (existing) continue
 
         const companyId = j.companyId ? companyIdMap.get(j.companyId as string) ?? null : null
@@ -222,6 +213,7 @@ router.post('/', async (req, res) => {
 
         const newJob = await prisma.jobPosting.create({
           data: {
+            userId: req.userId,
             companyId,
             title: j.title as string,
             location: (j.location as string) ?? '',

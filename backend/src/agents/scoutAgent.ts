@@ -147,6 +147,7 @@ export async function runScoutAgentForCompany(companyId: number, userId?: number
         // Create new job posting
         const newJob = await prisma.jobPosting.create({
           data: {
+            userId: company.userId,
             companyId,
             title: draft.title,
             location: draft.location,
@@ -197,6 +198,7 @@ export async function runScoutAgentForCompany(companyId: number, userId?: number
         if (scoreResult.total >= 70) {
           await prisma.notification.create({
             data: {
+              userId: company.userId,
               jobPostingId: newJob.id,
               channel: 'in_app',
               message: `New high-fit role (${scoreResult.total}/100): ${draft.title} at ${company.name}`,

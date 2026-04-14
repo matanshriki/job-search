@@ -18,12 +18,14 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profiles       Profile[]
-  companies      TargetCompany[]
-  resumes        Resume[]
-  appSettings    AppSettings[]
-  jobBoardSources JobBoardSource[]
-  approvalQueue  ApprovalQueueItem[]
+  profiles          Profile[]
+  companies         TargetCompany[]
+  resumes           Resume[]
+  appSettings       AppSettings[]
+  jobBoardSources   JobBoardSource[]
+  approvalQueue     ApprovalQueueItem[]
+  jobPostings       JobPosting[]
+  notifications     Notification[]
 
   @@map("users")
 }
@@ -111,6 +113,7 @@ model CompanySource {
 
 model JobPosting {
   id               Int       @id @default(autoincrement())
+  userId           Int
   companyId        Int?
   externalJobId    String    @default("")
   title            String
@@ -135,6 +138,7 @@ model JobPosting {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   company         TargetCompany?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
   match           JobMatch?
   generatedAssets GeneratedAsset[]
@@ -144,6 +148,7 @@ model JobPosting {
   activityLogs    ActivityLog[]
   approvalQueue   ApprovalQueueItem[]
 
+  @@index([userId])
   @@map("job_postings")
 }
 
@@ -224,6 +229,7 @@ model ScanRun {
 
 model Notification {
   id           Int       @id @default(autoincrement())
+  userId       Int
   jobPostingId Int?
   channel      String    @default("in_app")
   message      String
@@ -231,8 +237,10 @@ model Notification {
   sentAt       DateTime?
   createdAt    DateTime  @default(now())
 
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobPosting JobPosting? @relation(fields: [jobPostingId], references: [id], onDelete: SetNull)
 
+  @@index([userId])
   @@map("notifications")
 }
 

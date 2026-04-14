@@ -14,7 +14,7 @@ export function setupPassport() {
 
   if (!clientID || !clientSecret) {
     console.warn(
-      '  ⚠  GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — Google login disabled.',
+      '  GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — Google login disabled.',
     )
     return
   }
@@ -28,39 +28,39 @@ export function setupPassport() {
       },
       async (_accessToken, _refreshToken, profile, done) => {
         try {
-          const email =
+          const rawEmail =
             profile.emails?.[0]?.value ?? `${profile.id}@google.placeholder`
+          const email = rawEmail.trim().toLowerCase()
           const name = profile.displayName ?? ''
           const avatarUrl = profile.photos?.[0]?.value ?? ''
 
-          const existingUser = await prisma.user.findUnique({ where: { googleId: profile.id } })
-          const isNewUser = !existingUser
+          // 1) Returning Google user
+          let user = await prisma.user.findUnique({ where: { googleId: profile.id } })
 
-          const user = await prisma.user.upsert({
-            where: { googleId: profile.id },
-            update: { name, avatarUrl, email },
-            create: {
-              googleId: profile.id,
-              email,
-              name,
-              avatarUrl,
-            },
-          })
-
-          // NEVER auto-migrate user id=1 → a new Google account in production: the next person to
-          // sign up would receive another tenant's data. Enable only for intentional one-off imports.
-          if (isNewUser && process.env.ALLOW_LEGACY_USER1_DATA_MIGRATION === 'true') {
-            const SYSTEM_USER_ID = 1
-            const systemHasData = await prisma.targetCompany.count({ where: { userId: SYSTEM_USER_ID } })
-
-            if (systemHasData > 0) {
-              await prisma.$transaction([
-                prisma.targetCompany.updateMany({ where: { userId: SYSTEM_USER_ID }, data: { userId: user.id } }),
-                prisma.profile.updateMany({ where: { userId: SYSTEM_USER_ID }, data: { userId: user.id } }),
-                prisma.resume.updateMany({ where: { userId: SYSTEM_USER_ID }, data: { userId: user.id } }),
-                prisma.appSettings.updateMany({ where: { userId: SYSTEM_USER_ID }, data: { userId: user.id } }),
-              ])
-              console.log(`  ✓ Migrated legacy user 1 data → userId=${user.id} (${email})`)
+          if (user) {
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: { name, avatarUrl, email },
+            })
+          } else {
+            // 2) Existing row with same email (seed / import) but no googleId yet — attach this Google account
+            const byEmail = await prisma.user.findUnique({ where: { email } })
+            if (byEmail) {
+              if (byEmail.googleId && byEmail.googleId !== profile.id) {
+                return done(
+                  new Error(
+                    'This email is already linked to a different Google account. Use that account or contact support.',
+                  ),
+                )
+              }
+              user = await prisma.user.update({
+                where: { id: byEmail.id },
+                data: { googleId: profile.id, name, avatarUrl, email },
+              })
+            } else {
+              user = await prisma.user.create({
+                data: { googleId: profile.id, email, name, avatarUrl },
+              })
             }
           }
 

@@ -189,7 +189,9 @@ router.post('/:id/paste-html', async (req, res) => {
     if (result.ok && profile) {
       for (const draft of result.jobs) {
         const key = draft.normalizedKey || jobDuplicateKey(draft.company, draft.title, draft.location)
-        const existing = await prisma.jobPosting.findFirst({ where: { normalizedKey: key, companyId: id } })
+        const existing = await prisma.jobPosting.findFirst({
+          where: { normalizedKey: key, companyId: id, userId: req.userId },
+        })
         if (existing) continue
         const sr = scoreJobAgainstProfile(
           { title: draft.title, company: draft.company, location: draft.location, description: draft.description },
@@ -197,6 +199,7 @@ router.post('/:id/paste-html', async (req, res) => {
         )
         const newJob = await prisma.jobPosting.create({
           data: {
+            userId: req.userId,
             companyId: id,
             title: draft.title,
             location: draft.location,

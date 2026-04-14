@@ -154,7 +154,7 @@ async function crawlSource(
       .then((rows) => rows.map((r) => r.id))
 
     const existing = await prisma.jobPosting.findFirst({
-      where: { normalizedKey: key, companyId: { in: userCompanyIds } },
+      where: { normalizedKey: key, userId },
       select: { id: true },
     })
 
@@ -174,6 +174,7 @@ async function crawlSource(
 
     const newJob = await prisma.jobPosting.create({
       data: {
+        userId,
         companyId,
         title: draft.title,
         location: draft.location,
@@ -221,6 +222,7 @@ async function crawlSource(
     if (scoreResult.total >= 70) {
       await prisma.notification.create({
         data: {
+          userId,
           jobPostingId: newJob.id,
           channel: 'in_app',
           message: `New high-fit role from ${draft.sourceLabel} (${scoreResult.total}/100): ${draft.title} at ${draft.company}`,

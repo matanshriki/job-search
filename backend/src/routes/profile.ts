@@ -59,12 +59,8 @@ router.put('/', async (req, res) => {
 
     // Rescore only this user's active jobs
     const profile = buildProfileFromDb(row)
-    const userCompanyIds = (
-      await prisma.targetCompany.findMany({ where: { userId: req.userId }, select: { id: true } })
-    ).map((c) => c.id)
-
     const jobs = await prisma.jobPosting.findMany({
-      where: { isActive: true, companyId: { in: userCompanyIds } },
+      where: { isActive: true, userId: req.userId },
       include: { company: { select: { name: true } } },
     })
     for (const job of jobs) {
