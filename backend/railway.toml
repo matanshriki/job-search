@@ -5,8 +5,8 @@ builder = "nixpacks"
 buildCommand = "npm install && npx prisma generate && npm run build"
 
 [deploy]
-# Use migrate deploy (not db push): matches prisma/migrations and avoids interactive / drift issues.
-startCommand = "npx prisma migrate deploy && node dist/index.js"
+# migrate deploy + auto-baseline when DB was previously managed with db push (Prisma P3005).
+startCommand = "bash scripts/railway-start.sh"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
