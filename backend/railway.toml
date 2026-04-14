@@ -5,7 +5,8 @@ builder = "nixpacks"
 buildCommand = "npm install && npx prisma generate && npm run build"
 
 [deploy]
-startCommand = "npx prisma db push && node dist/index.js"
+# Use migrate deploy (not db push): matches prisma/migrations and avoids interactive / drift issues.
+startCommand = "npx prisma migrate deploy && node dist/index.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
